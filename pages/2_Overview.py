@@ -33,10 +33,11 @@ if df.empty:
     st.warning("No data for this selection.")
     st.stop()
 
-k = calculator.kpis(df)
-trend = calculator.monthly_trend_v2(df)
-prelim, threshold_days = calculator.preliminary_months(df)
-deltas = calculator.kpi_deltas(trend, prelim)
+with st.spinner("Analysing data…"):
+    k = calculator.kpis(df)
+    trend = calculator.monthly_trend_v2(df)
+    prelim, threshold_days = calculator.preliminary_months(df)
+    deltas = calculator.kpi_deltas(trend, prelim)
 breakage_rate = round(100 - k["activation_rate"], 2)
 
 st.markdown("")

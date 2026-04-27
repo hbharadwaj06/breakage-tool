@@ -130,7 +130,14 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     ).fillna(0).astype(int)
 
     brand_types = load_brand_types()
-    df["card_type"] = df["Brand"].map(brand_types).fillna("closed_loop")
+    # brand_types keys are substrings (case-insensitive) — e.g. "Visa" matches "Visa* CAD Gift Card"
+    def _map_card_type(brand: str) -> str:
+        brand_lower = brand.lower()
+        for key, ctype in brand_types.items():
+            if key.lower() in brand_lower:
+                return ctype
+        return "closed_loop"
+    df["card_type"] = df["Brand"].apply(_map_card_type)
     df["composite_key"] = df["Reference ID"] + "|" + df["User_ID"] + "|" + df["Brand"]
 
     df["is_activated"] = df["Final Redemption Status"] == 1

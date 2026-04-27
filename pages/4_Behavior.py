@@ -53,7 +53,8 @@ with legend_col:
         unsafe_allow_html=True,
     )
 
-matrix_data = calculator.cohort_activation_matrix(df, currency)
+with st.spinner("Building cohort matrix…"):
+    matrix_data = calculator.cohort_activation_matrix(df, currency)
 if matrix_data is None:
     st.info(f"No data available for {currency}.")
 else:
@@ -69,7 +70,8 @@ st.caption(
     "Steep early drop = fast cohort. Flat line = high breakage cohort."
 )
 
-survival_df = calculator.cohort_survival(df, currency)
+with st.spinner("Computing decay curves…"):
+    survival_df = calculator.cohort_survival(df, currency)
 if len(survival_df) >= 2:
     st.plotly_chart(charts.survival_curve_chart(survival_df), use_container_width=True)
 else:
