@@ -50,8 +50,12 @@ def _login_screen():
 def require_login():
     """Call at the top of every page. Blocks if not authenticated."""
     if "_auth_user" not in st.session_state:
-        _login_screen()
-        st.stop()
+        # DEV MODE: auto-login — restore the two lines below when deploying
+        st.session_state["_auth_user"] = "dev"
+        st.session_state["_auth_role"] = "admin"
+        st.session_state["_auth_name"] = "Dev"
+        # _login_screen()
+        # st.stop()
 
 
 def is_admin() -> bool:
