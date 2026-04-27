@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy this file to users.json and run: python scripts/manage_users.py set-password <username>",
+  "admin": {
+    "name": "Admin",
+    "role": "admin",
+    "password_hash": ""
+  },
+  "viewer": {
+    "name": "Viewer",
+    "role": "viewer",
+    "password_hash": ""
+  }
+}

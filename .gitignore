@@ -1,0 +1,23 @@
+# Real data — never commit CSVs with actual redemption records
+data/
+!data/.gitkeep
+
+# Real user credentials — each collaborator runs manage_users.py to create their own
+config/users.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Streamlit cache
+.streamlit/
+
+# Internal planning notes
+brain.md
