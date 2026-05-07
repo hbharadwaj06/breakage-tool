@@ -23,18 +23,28 @@ def load_brand_types() -> dict:
 
 # ── Persistent store helpers ──────────────────────────────────────────────────
 
-def get_stored_files() -> list:
-    from modules import gdrive
+def _remote_backend():
+    """Returns the configured remote storage module (gdrive or onedrive), or None."""
+    from modules import gdrive, onedrive
     if gdrive.is_configured():
-        return gdrive.list_csv_files()
+        return gdrive
+    if onedrive.is_configured():
+        return onedrive
+    return None
+
+
+def get_stored_files() -> list:
+    backend = _remote_backend()
+    if backend:
+        return backend.list_csv_files()
     os.makedirs(DATA_DIR, exist_ok=True)
     return sorted([f for f in os.listdir(DATA_DIR) if f.lower().endswith(".csv")])
 
 
 def save_uploaded_file(uploaded_file) -> None:
-    from modules import gdrive
-    if gdrive.is_configured():
-        gdrive.upload_csv(uploaded_file.name, bytes(uploaded_file.getbuffer()))
+    backend = _remote_backend()
+    if backend:
+        backend.upload_csv(uploaded_file.name, bytes(uploaded_file.getbuffer()))
     else:
         os.makedirs(DATA_DIR, exist_ok=True)
         path = os.path.join(DATA_DIR, uploaded_file.name)
@@ -43,9 +53,9 @@ def save_uploaded_file(uploaded_file) -> None:
 
 
 def delete_stored_file(filename: str) -> None:
-    from modules import gdrive
-    if gdrive.is_configured():
-        gdrive.delete_csv(filename)
+    backend = _remote_backend()
+    if backend:
+        backend.delete_csv(filename)
     else:
         path = os.path.join(DATA_DIR, filename)
         if os.path.exists(path):
@@ -53,16 +63,16 @@ def delete_stored_file(filename: str) -> None:
 
 
 def load_from_store() -> tuple:
-    """Load and merge all CSVs from Drive or local data/. Returns (df, warnings)."""
-    from modules import gdrive
-    if gdrive.is_configured():
-        files = gdrive.list_csv_files()
+    """Load and merge all CSVs from remote storage or local data/. Returns (df, warnings)."""
+    backend = _remote_backend()
+    if backend:
+        files = backend.list_csv_files()
         if not files:
             return None, []
         frames, warnings = [], []
         for name in files:
             try:
-                raw = pd.read_csv(io.BytesIO(gdrive.download_csv(name)))
+                raw = pd.read_csv(io.BytesIO(backend.download_csv(name)))
             except Exception as e:
                 warnings.append(f"{name}: failed to parse — {e}")
                 continue
