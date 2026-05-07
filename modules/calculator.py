@@ -1,4 +1,5 @@
 import pandas as pd
+import streamlit as st
 
 CURRENCY_SYMBOLS = {
     "INR": "₹", "USD": "$", "AED": "AED ", "SGD": "S$",
@@ -25,6 +26,7 @@ def fmt_amount(amount, currency):
         return f"{sym}{amount:.0f}"
 
 
+@st.cache_data
 def kpis(df: pd.DataFrame) -> dict:
     total = len(df)
     activated = df["is_activated"].sum()
@@ -49,6 +51,7 @@ def activated_amount_for_currency(df: pd.DataFrame, currency: str) -> float:
     return round(df[(df["Currency"] == currency) & df["is_activated"]]["Amount"].sum(), 2)
 
 
+@st.cache_data
 def maturity_threshold_days(df: pd.DataFrame, pct: float = 0.95) -> int:
     """
     How many days after redemption until `pct` of all activations have occurred,
@@ -61,15 +64,12 @@ def maturity_threshold_days(df: pd.DataFrame, pct: float = 0.95) -> int:
     activated = settled[settled["is_activated"] & settled["activation_lag_days"].notna()]
 
     if len(activated) < 20:
-        return 60  # not enough history yet
+        return 60
 
-    total = len(activated)
-    for d in range(1, 366):
-        if (activated["activation_lag_days"] <= d).sum() / total >= pct:
-            return d
-    return 180
+    return max(1, int(activated["activation_lag_days"].quantile(pct)))
 
 
+@st.cache_data
 def preliminary_months(df: pd.DataFrame) -> tuple:
     """
     Returns (frozenset of month-strings that are preliminary, threshold_days).
@@ -84,42 +84,55 @@ def preliminary_months(df: pd.DataFrame) -> tuple:
     return prelim, threshold
 
 
+@st.cache_data
 def monthly_trend_v2(df: pd.DataFrame) -> pd.DataFrame:
-    rows = []
-    for month, group in df.groupby("redemption_month"):
-        total = len(group)
-        act = group["is_activated"].sum()
-        breakage = group[group["is_breakage"]]
-        rows.append({
-            "redemption_month": str(month),
-            "total": total,
-            "activated": int(act),
-            "not_activated": total - int(act),
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "activation_rate": round(act / total * 100, 2) if total else 0,
-        })
-    return pd.DataFrame(rows)
+    breakage_df = df[df["is_breakage"]]
+    g = df.groupby("redemption_month")
+    bg = breakage_df.groupby("redemption_month")
+
+    result = pd.DataFrame({
+        "total": g.size(),
+        "activated": g["is_activated"].sum(),
+        "breakage_count": bg.size(),
+        "breakage_amount": bg["Amount"].sum(),
+    }).fillna(0)
+    result.index.name = "redemption_month"
+    result = result.reset_index()
+    result["redemption_month"] = result["redemption_month"].astype(str)
+    result["not_activated"] = (result["total"] - result["activated"]).astype(int)
+    result["activated"] = result["activated"].astype(int)
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["activation_rate"] = (
+        result["activated"] / result["total"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result
 
 
+@st.cache_data
 def weekly_trend(df: pd.DataFrame) -> pd.DataFrame:
     df_copy = df[df["Redemption Date"].notna()].copy()
     df_copy["week_start"] = (
-        df_copy["Redemption Date"].dt.to_period("W-MON").apply(lambda p: p.start_time.date())
+        df_copy["Redemption Date"].dt.to_period("W-MON").dt.start_time.dt.date
     )
-    rows = []
-    for week, group in df_copy.groupby("week_start"):
-        total = len(group)
-        breakage = group[group["is_breakage"]]
-        rows.append({
-            "week_start": week,
-            "week_label": pd.Timestamp(week).strftime("%b %d"),
-            "total": total,
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "breakage_rate": round(len(breakage) / total * 100, 2) if total else 0,
-        })
-    return pd.DataFrame(rows).sort_values("week_start").reset_index(drop=True)
+    breakage_df = df_copy[df_copy["is_breakage"]]
+    g = df_copy.groupby("week_start")
+    bg = breakage_df.groupby("week_start")
+
+    result = pd.DataFrame({
+        "total": g.size(),
+        "breakage_count": bg.size(),
+        "breakage_amount": bg["Amount"].sum(),
+    }).fillna(0)
+    result.index.name = "week_start"
+    result = result.reset_index()
+    result["week_label"] = result["week_start"].apply(lambda d: pd.Timestamp(d).strftime("%b %d"))
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result.sort_values("week_start").reset_index(drop=True)
 
 
 _DENOM_BINS = {
@@ -138,6 +151,7 @@ _DENOM_BINS = {
 _DENOM_DEFAULT = ([0, 10, 50, 100, 500, float("inf")], ["<10", "10–50", "50–100", "100–500", "500+"])
 
 
+@st.cache_data
 def breakage_by_denomination(df: pd.DataFrame, currency: str = None) -> pd.DataFrame:
     if currency is None:
         currencies = df["Currency"].dropna().unique()
@@ -145,84 +159,103 @@ def breakage_by_denomination(df: pd.DataFrame, currency: str = None) -> pd.DataF
     bins, labels = _DENOM_BINS.get(currency, _DENOM_DEFAULT) if currency else _DENOM_DEFAULT
     d = df.copy()
     d["denomination_bucket"] = pd.cut(d["Amount"], bins=bins, labels=labels, right=True)
-    result = []
-    for bucket, group in d.groupby("denomination_bucket", observed=True):
-        breakage = group[group["is_breakage"]]
-        result.append({
-            "denomination": str(bucket),
-            "total_count": len(group),
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "breakage_rate": round(len(breakage) / len(group) * 100, 2) if len(group) else 0,
-        })
-    return pd.DataFrame(result)
+
+    g = d.groupby("denomination_bucket", observed=True)
+    bg = d[d["is_breakage"]].groupby("denomination_bucket", observed=True)
+
+    total = g.agg(total_count=("Amount", "count"))
+    breakage = bg.agg(breakage_count=("Amount", "count"), breakage_amount=("Amount", "sum"))
+
+    result = total.join(breakage, how="left").fillna(0).reset_index()
+    result.rename(columns={"denomination_bucket": "denomination"}, inplace=True)
+    result["denomination"] = result["denomination"].astype(str)
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total_count"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result
 
 
+@st.cache_data
 def breakage_by_card_type(df: pd.DataFrame) -> pd.DataFrame:
-    result = []
-    for ctype, group in df.groupby("card_type"):
-        breakage = group[group["is_breakage"]]
-        total_amount = group["Amount"].sum()
-        result.append({
-            "card_type": ctype,
-            "total_count": len(group),
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "total_amount": round(total_amount, 2),
-            "breakage_rate": round(len(breakage) / len(group) * 100, 2) if len(group) else 0,
-            "breakage_amount_pct": round(breakage["Amount"].sum() / total_amount * 100, 2) if total_amount else 0,
-        })
-    return pd.DataFrame(result)
+    g = df.groupby("card_type")
+    bg = df[df["is_breakage"]].groupby("card_type")
+
+    total = g.agg(total_count=("Amount", "count"), total_amount=("Amount", "sum"))
+    breakage = bg.agg(breakage_count=("Amount", "count"), breakage_amount=("Amount", "sum"))
+
+    result = total.join(breakage, how="left").fillna(0).reset_index()
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["total_amount"] = result["total_amount"].round(2)
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total_count"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    result["breakage_amount_pct"] = (
+        result["breakage_amount"] / result["total_amount"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result
 
 
+@st.cache_data
 def breakage_by_brand(df: pd.DataFrame) -> pd.DataFrame:
-    result = []
-    for brand, group in df.groupby("Brand"):
-        breakage = group[group["is_breakage"]]
-        total_amount = group["Amount"].sum()
-        result.append({
-            "brand": brand,
-            "total_count": len(group),
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "total_amount": round(total_amount, 2),
-            "breakage_rate": round(len(breakage) / len(group) * 100, 2) if len(group) else 0,
-        })
-    return pd.DataFrame(result).sort_values("breakage_amount", ascending=False)
+    g = df.groupby("Brand")
+    bg = df[df["is_breakage"]].groupby("Brand")
+
+    total = g.agg(total_count=("Amount", "count"), total_amount=("Amount", "sum"))
+    breakage = bg.agg(breakage_count=("Amount", "count"), breakage_amount=("Amount", "sum"))
+
+    result = total.join(breakage, how="left").fillna(0).reset_index()
+    result.rename(columns={"Brand": "brand"}, inplace=True)
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["total_amount"] = result["total_amount"].round(2)
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total_count"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result.sort_values("breakage_amount", ascending=False)
 
 
+@st.cache_data
 def breakage_by_company(df: pd.DataFrame) -> pd.DataFrame:
-    result = []
-    for company, group in df.groupby("Company"):
-        breakage = group[group["is_breakage"]]
-        total_amount = group["Amount"].sum()
-        result.append({
-            "company": company,
-            "total_count": len(group),
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "total_amount": round(total_amount, 2),
-            "breakage_rate": round(len(breakage) / len(group) * 100, 2) if len(group) else 0,
-        })
-    return pd.DataFrame(result).sort_values("breakage_amount", ascending=False)
+    g = df.groupby("Company")
+    bg = df[df["is_breakage"]].groupby("Company")
+
+    total = g.agg(total_count=("Amount", "count"), total_amount=("Amount", "sum"))
+    breakage = bg.agg(breakage_count=("Amount", "count"), breakage_amount=("Amount", "sum"))
+
+    result = total.join(breakage, how="left").fillna(0).reset_index()
+    result.rename(columns={"Company": "company"}, inplace=True)
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["total_amount"] = result["total_amount"].round(2)
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total_count"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result.sort_values("breakage_amount", ascending=False)
 
 
+@st.cache_data
 def breakage_by_geography(df: pd.DataFrame) -> pd.DataFrame:
-    result = []
-    for country, group in df.groupby("Country"):
-        breakage = group[group["is_breakage"]]
-        total_amount = group["Amount"].sum()
-        result.append({
-            "country": country,
-            "total_count": len(group),
-            "breakage_count": len(breakage),
-            "breakage_amount": round(breakage["Amount"].sum(), 2),
-            "total_amount": round(total_amount, 2),
-            "breakage_rate": round(len(breakage) / len(group) * 100, 2) if len(group) else 0,
-        })
-    return pd.DataFrame(result).sort_values("breakage_amount", ascending=False)
+    g = df.groupby("Country")
+    bg = df[df["is_breakage"]].groupby("Country")
+
+    total = g.agg(total_count=("Amount", "count"), total_amount=("Amount", "sum"))
+    breakage = bg.agg(breakage_count=("Amount", "count"), breakage_amount=("Amount", "sum"))
+
+    result = total.join(breakage, how="left").fillna(0).reset_index()
+    result.rename(columns={"Country": "country"}, inplace=True)
+    result["breakage_count"] = result["breakage_count"].astype(int)
+    result["breakage_amount"] = result["breakage_amount"].round(2)
+    result["total_amount"] = result["total_amount"].round(2)
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total_count"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    return result.sort_values("breakage_amount", ascending=False)
 
 
+@st.cache_data
 def cohort_table(df: pd.DataFrame) -> pd.DataFrame:
     windows = [7, 30, 90, 180]
     rows = []
@@ -238,24 +271,26 @@ def cohort_table(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@st.cache_data
 def cohort_survival(df: pd.DataFrame, currency: str) -> pd.DataFrame:
     """For each cohort, % of cards still unactivated at each day threshold."""
-    df_c = df[df["Currency"] == currency].copy()
+    df_c = df[df["Currency"] == currency]
     thresholds = [1, 7, 14, 30, 60, 90, 180]
     rows = []
     for month, group in df_c.groupby("redemption_month"):
         total = len(group)
         if total < 5:
             continue
+        not_yet = (~group["is_activated"]).sum()
         row = {"cohort": str(month)}
         for t in thresholds:
-            not_yet = (~group["is_activated"]).sum()
             activated_late = (group["is_activated"] & (group["activation_lag_days"] > t)).sum()
             row[f"day_{t}"] = round((not_yet + activated_late) / total * 100, 1)
         rows.append(row)
     return pd.DataFrame(rows)
 
 
+@st.cache_data
 def activation_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
     """7×24 pivot of activation counts by day-of-week × hour."""
     activated = df[df["is_activated"] & df["Activation Date"].notna()].copy()
@@ -274,8 +309,9 @@ def activation_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
     return pivot.sort_index()[sorted(pivot.columns)]
 
 
+@st.cache_data
 def cohort_activation_matrix(df: pd.DataFrame, currency: str):
-    df_c = df[df["Currency"] == currency].copy()
+    df_c = df[df["Currency"] == currency]
     if df_c.empty:
         return None
 
@@ -289,13 +325,36 @@ def cohort_activation_matrix(df: pd.DataFrame, currency: str):
     open_boundary = pd.Period(max_date - pd.Timedelta(days=threshold), "M")
     open_cohorts = {m for m in r_months if m > open_boundary}
 
+    # Pre-build aggregates to avoid O(n) DataFrame filters in inner loop
+    totals = df_c.groupby("redemption_month").size()
+
+    act_df = df_c[df_c["is_activated"] & df_c["activation_month"].notna()]
+    if not act_df.empty:
+        count_pivot = (
+            act_df.groupby(["redemption_month", "activation_month"])
+            .size()
+            .unstack(fill_value=0)
+            .reindex(index=r_months, columns=a_months, fill_value=0)
+        )
+        amount_pivot = (
+            act_df.groupby(["redemption_month", "activation_month"])["Amount"]
+            .sum()
+            .unstack(fill_value=0)
+            .reindex(index=r_months, columns=a_months, fill_value=0)
+        )
+    else:
+        count_pivot = pd.DataFrame(0, index=r_months, columns=a_months)
+        amount_pivot = pd.DataFrame(0.0, index=r_months, columns=a_months)
+
+    never_g = df_c[df_c["is_breakage"]].groupby("redemption_month")
+    never_counts = never_g.size().reindex(r_months, fill_value=0)
+    never_amounts = never_g["Amount"].sum().reindex(r_months, fill_value=0)
+
     act_z, act_pct_text, act_amount_text = [], [], []
     never_z, never_pct_text, never_amount_text = [], [], []
 
     for r_month in r_months:
-        cohort = df_c[df_c["redemption_month"] == r_month]
-        total = len(cohort)
-
+        total = totals.get(r_month, 0)
         z_row, pct_row, amt_row = [], [], []
         for a_month in a_months:
             if a_month < r_month:
@@ -303,9 +362,8 @@ def cohort_activation_matrix(df: pd.DataFrame, currency: str):
                 pct_row.append("")
                 amt_row.append("")
             else:
-                activated = cohort[cohort["activation_month"] == a_month]
-                count = len(activated)
-                amount = activated["Amount"].sum()
+                count = count_pivot.loc[r_month, a_month] if a_month in count_pivot.columns else 0
+                amount = amount_pivot.loc[r_month, a_month] if a_month in amount_pivot.columns else 0
                 pct = count / total * 100 if total else 0
                 if count > 0:
                     z_row.append(pct)
@@ -319,12 +377,13 @@ def cohort_activation_matrix(df: pd.DataFrame, currency: str):
         act_pct_text.append(pct_row)
         act_amount_text.append(amt_row)
 
-        never = cohort[cohort["is_breakage"]]
-        n_pct = len(never) / total * 100 if total else 0
+        n_count = int(never_counts.get(r_month, 0))
+        n_amount = never_amounts.get(r_month, 0)
+        n_pct = n_count / total * 100 if total else 0
         prefix = "~" if r_month in open_cohorts else ""
         never_z.append([n_pct])
         never_pct_text.append([f"{prefix}{n_pct:.1f}%"])
-        never_amount_text.append([f"{prefix}{fmt_amount(never['Amount'].sum(), currency)}"])
+        never_amount_text.append([f"{prefix}{fmt_amount(n_amount, currency)}"])
 
     return {
         "act_z": act_z,
@@ -340,13 +399,13 @@ def cohort_activation_matrix(df: pd.DataFrame, currency: str):
     }
 
 
+@st.cache_data
 def kpi_deltas(trend_df: pd.DataFrame, prelim_months: frozenset = None) -> dict:
     """Compare most recent mature month vs the one before it."""
     prelim_months = prelim_months or frozenset()
     mature = trend_df[~trend_df["redemption_month"].isin(prelim_months)]
 
     if len(mature) < 2:
-        # Fall back to raw trend if not enough mature data
         mature = trend_df
 
     if len(mature) < 2:
@@ -371,6 +430,7 @@ def kpi_deltas(trend_df: pd.DataFrame, prelim_months: frozenset = None) -> dict:
     }
 
 
+@st.cache_data
 def generate_insights(df: pd.DataFrame, currency: str) -> list:
     """Short insight bullets for Overview page. Uses mature cohorts for rate comparisons."""
     df_c = df[df["Currency"] == currency]
@@ -433,6 +493,7 @@ def generate_insights(df: pd.DataFrame, currency: str) -> list:
     return insights
 
 
+@st.cache_data
 def generate_full_insights(df: pd.DataFrame, currency: str) -> dict:
     df_c = df[df["Currency"] == currency]
     if df_c.empty:
@@ -458,7 +519,6 @@ def generate_full_insights(df: pd.DataFrame, currency: str) -> dict:
     else:
         health = "elevated — a significant share of cards are going unactivated"
 
-    # Use mature cohorts for the headline rate to avoid recency bias
     if len(mature_trend) > 0:
         mature_k = kpis(df_c[~df_c["redemption_month"].astype(str).isin(prelim)])
         mature_br = round(100 - mature_k["activation_rate"], 2)
@@ -477,7 +537,6 @@ def generate_full_insights(df: pd.DataFrame, currency: str) -> dict:
         f"{fmt_amount(k['activated_amount'], currency)} has been successfully activated by employees."
     )
 
-    # Latest mature month for "this month"
     if len(mature_trend) > 0:
         latest = mature_trend.iloc[-1]
         latest_br = round(100 - latest["activation_rate"], 2)

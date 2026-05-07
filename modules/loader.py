@@ -1,3 +1,4 @@
+import functools
 import io
 import json
 import os
@@ -14,6 +15,7 @@ BRAND_TYPES_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "bran
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 
 
+@functools.lru_cache(maxsize=1)
 def load_brand_types() -> dict:
     with open(BRAND_TYPES_PATH) as f:
         return json.load(f)
@@ -167,14 +169,11 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     ).fillna(0).astype(int)
 
     brand_types = load_brand_types()
-    # brand_types keys are substrings (case-insensitive) — e.g. "Visa" matches "Visa* CAD Gift Card"
-    def _map_card_type(brand: str) -> str:
-        brand_lower = brand.lower()
-        for key, ctype in brand_types.items():
-            if key.lower() in brand_lower:
-                return ctype
-        return "closed_loop"
-    df["card_type"] = df["Brand"].apply(_map_card_type)
+    # Vectorized brand type mapping: apply in reverse so first-listed keys take priority
+    df["card_type"] = "closed_loop"
+    brand_lower = df["Brand"].str.lower()
+    for key, ctype in reversed(list(brand_types.items())):
+        df.loc[brand_lower.str.contains(key.lower(), regex=False, na=False), "card_type"] = ctype
     df["composite_key"] = df["Reference ID"] + "|" + df["User_ID"] + "|" + df["Brand"]
 
     df["is_activated"] = df["Final Redemption Status"] == 1
