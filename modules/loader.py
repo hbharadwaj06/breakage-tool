@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import pandas as pd
@@ -21,26 +22,62 @@ def load_brand_types() -> dict:
 # ── Persistent store helpers ──────────────────────────────────────────────────
 
 def get_stored_files() -> list:
+    from modules import gdrive
+    if gdrive.is_configured():
+        return gdrive.list_csv_files()
     os.makedirs(DATA_DIR, exist_ok=True)
     return sorted([f for f in os.listdir(DATA_DIR) if f.lower().endswith(".csv")])
 
 
-def save_uploaded_file(uploaded_file) -> str:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    path = os.path.join(DATA_DIR, uploaded_file.name)
-    with open(path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    return path
+def save_uploaded_file(uploaded_file) -> None:
+    from modules import gdrive
+    if gdrive.is_configured():
+        gdrive.upload_csv(uploaded_file.name, bytes(uploaded_file.getbuffer()))
+    else:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        path = os.path.join(DATA_DIR, uploaded_file.name)
+        with open(path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
 
 
-def delete_stored_file(filename: str):
-    path = os.path.join(DATA_DIR, filename)
-    if os.path.exists(path):
-        os.remove(path)
+def delete_stored_file(filename: str) -> None:
+    from modules import gdrive
+    if gdrive.is_configured():
+        gdrive.delete_csv(filename)
+    else:
+        path = os.path.join(DATA_DIR, filename)
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def load_from_store() -> tuple:
-    """Load and merge all CSVs in data/. Returns (df, warnings)."""
+    """Load and merge all CSVs from Drive or local data/. Returns (df, warnings)."""
+    from modules import gdrive
+    if gdrive.is_configured():
+        files = gdrive.list_csv_files()
+        if not files:
+            return None, []
+        frames, warnings = [], []
+        for name in files:
+            try:
+                raw = pd.read_csv(io.BytesIO(gdrive.download_csv(name)))
+            except Exception as e:
+                warnings.append(f"{name}: failed to parse — {e}")
+                continue
+            missing = [c for c in REQUIRED_COLUMNS if c not in raw.columns]
+            if missing:
+                warnings.append(f"{name}: missing columns {missing} — skipped")
+                continue
+            raw["_source_file"] = name
+            frames.append(raw[REQUIRED_COLUMNS + ["_source_file"]])
+        if not frames:
+            return None, warnings
+        merged = pd.concat(frames, ignore_index=True)
+        merged = _clean(merged)
+        merged, dup_count = _dedup(merged)
+        if dup_count:
+            warnings.append(f"Removed {dup_count} duplicate rows across all stored files.")
+        return merged, warnings
     stored = get_stored_files()
     if not stored:
         return None, []

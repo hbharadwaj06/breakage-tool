@@ -11,6 +11,11 @@ def _hash(password: str) -> str:
 
 
 def _load_users() -> dict:
+    try:
+        if "users" in st.secrets:
+            return {k: dict(v) for k, v in st.secrets["users"].items()}
+    except Exception:
+        pass
     if not os.path.exists(_USERS_FILE):
         return {}
     with open(_USERS_FILE) as f:
@@ -50,12 +55,8 @@ def _login_screen():
 def require_login():
     """Call at the top of every page. Blocks if not authenticated."""
     if "_auth_user" not in st.session_state:
-        # DEV MODE: auto-login — restore the two lines below when deploying
-        st.session_state["_auth_user"] = "dev"
-        st.session_state["_auth_role"] = "admin"
-        st.session_state["_auth_name"] = "Dev"
-        # _login_screen()
-        # st.stop()
+        _login_screen()
+        st.stop()
 
 
 def is_admin() -> bool:

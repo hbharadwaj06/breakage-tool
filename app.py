@@ -11,6 +11,14 @@ st.set_page_config(
 require_login()
 sidebar_user_widget()
 
+if "df" not in st.session_state:
+    from modules.loader import get_stored_files, load_from_store
+    if get_stored_files():
+        with st.spinner("Loading data…"):
+            _df, _ = load_from_store()
+        if _df is not None:
+            st.session_state["df"] = _df
+
 pages = []
 if is_admin():
     pages.append(st.Page("pages/1_Upload.py", title="Upload Data", icon="📤"))
