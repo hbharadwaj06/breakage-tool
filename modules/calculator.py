@@ -110,7 +110,8 @@ def monthly_trend_v2(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data
-def weekly_trend(df: pd.DataFrame) -> pd.DataFrame:
+def weekly_trend(df: pd.DataFrame, currency: str = "") -> pd.DataFrame:
+    from modules.holidays import get_holiday_weeks
     df_copy = df[df["Redemption Date"].notna()].copy()
     df_copy["week_start"] = (
         df_copy["Redemption Date"].dt.to_period("W-MON").dt.start_time.dt.date
@@ -132,7 +133,33 @@ def weekly_trend(df: pd.DataFrame) -> pd.DataFrame:
     result["breakage_rate"] = (
         result["breakage_count"] / result["total"].replace(0, float("nan")) * 100
     ).round(2).fillna(0)
+    holiday_map = get_holiday_weeks(result["week_start"].tolist(), currency)
+    result["holiday_label"] = result["week_start"].map(lambda d: holiday_map.get(d, ""))
     return result.sort_values("week_start").reset_index(drop=True)
+
+
+_DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+@st.cache_data
+def breakage_by_dow(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakage rate and volume grouped by redemption day-of-week (Mon=0 … Sun=6)."""
+    valid = df[df["Redemption Date"].notna()].copy()
+    if valid.empty:
+        return pd.DataFrame()
+    valid["dow"] = valid["Redemption Date"].dt.dayofweek
+    g = valid.groupby("dow")
+    bg = valid[valid["is_breakage"]].groupby("dow")
+    result = pd.DataFrame({
+        "total": g.size(),
+        "breakage_count": bg.size(),
+    }).reindex(range(7), fill_value=0)
+    result.index.name = "dow"
+    result = result.reset_index()
+    result["breakage_rate"] = (
+        result["breakage_count"] / result["total"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    result["day_label"] = result["dow"].map(lambda d: _DOW_LABELS[d])
+    return result
 
 
 _DENOM_BINS = {

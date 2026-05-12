@@ -161,20 +161,97 @@ def activation_timing_heatmap(pivot_df: pd.DataFrame) -> go.Figure:
 
 def weekly_trend_chart(weekly_df: pd.DataFrame) -> go.Figure:
     avg = weekly_df["breakage_rate"].mean()
+    holiday_col = "holiday_label" if "holiday_label" in weekly_df.columns else None
+    has_holidays = holiday_col and weekly_df[holiday_col].any()
+
+    # Per-bar colors keep all bars in chronological order
+    colors = (
+        weekly_df[holiday_col].map(lambda h: "#e67e22" if h else "#c0392b").tolist()
+        if has_holidays
+        else ["#c0392b"] * len(weekly_df)
+    )
+    customdata = [
+        f"{r['week_label']}: {r['breakage_rate']:.1f}%<br>🗓 {r[holiday_col]}"
+        if has_holidays and r[holiday_col]
+        else f"{r['week_label']}: {r['breakage_rate']:.1f}%"
+        for _, r in weekly_df.iterrows()
+    ]
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=weekly_df["week_label"], y=weekly_df["breakage_rate"],
-        marker_color="#c0392b", hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
+        x=weekly_df["week_label"],
+        y=weekly_df["breakage_rate"],
+        marker_color=colors,
+        customdata=customdata,
+        hovertemplate="%{customdata}<extra></extra>",
+        showlegend=False,
     ))
+
+    if has_holidays:
+        # Dummy invisible traces just for the legend
+        for label, color in [("Normal week", "#c0392b"), ("Holiday / festival week", "#e67e22")]:
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None], mode="markers",
+                marker=dict(color=color, size=10, symbol="square"),
+                name=label, showlegend=True,
+            ))
+
     fig.add_hline(y=avg, line_dash="dash", line_color="#999",
                   annotation_text=f"Avg {avg:.1f}%", annotation_position="bottom right",
                   annotation_font_color="#555")
     fig.update_layout(
-        xaxis_title=None, yaxis_title="Breakage Rate %", showlegend=False,
-        margin=dict(t=10, b=80, l=60, r=20), plot_bgcolor="white", paper_bgcolor="white",
+        xaxis_title=None, yaxis_title="Breakage Rate %",
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0,
+                    font_size=11) if has_holidays else dict(visible=False),
+        margin=dict(t=30 if has_holidays else 10, b=80, l=60, r=20),
+        plot_bgcolor="white", paper_bgcolor="white",
     )
     fig.update_xaxes(showgrid=False, tickangle=45)
     fig.update_yaxes(gridcolor="#f0f0f0")
+    return fig
+
+
+def dow_breakage_chart(dow_df: pd.DataFrame) -> go.Figure:
+    """Bar chart of breakage rate by day of week, with volume as a secondary line."""
+    avg = dow_df["breakage_rate"].mean()
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=dow_df["day_label"],
+        y=dow_df["breakage_rate"],
+        name="Breakage rate",
+        marker_color="#c0392b",
+        yaxis="y1",
+        customdata=list(zip(dow_df["breakage_rate"], dow_df["total"])),
+        hovertemplate="%{x}: %{customdata[0]:.1f}%  (%{customdata[1]:,} cards)<extra></extra>",
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=dow_df["day_label"],
+        y=dow_df["total"],
+        name="Cards redeemed",
+        mode="lines+markers",
+        line=dict(color="#7f8c8d", width=2, dash="dot"),
+        marker=dict(size=5),
+        yaxis="y2",
+        hovertemplate="%{x}: %{y:,} cards<extra></extra>",
+    ))
+
+    fig.add_hline(y=avg, line_dash="dash", line_color="#bbb",
+                  annotation_text=f"Avg {avg:.1f}%", annotation_position="bottom right",
+                  annotation_font_color="#555", yref="y1")
+
+    fig.update_layout(
+        xaxis_title=None,
+        yaxis=dict(title="Breakage Rate %", showgrid=True, gridcolor="#f0f0f0"),
+        yaxis2=dict(title="Cards redeemed", overlaying="y", side="right",
+                    showgrid=False, tickformat=","),
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0, font_size=11),
+        margin=dict(t=30, b=40, l=60, r=60),
+        plot_bgcolor="white", paper_bgcolor="white",
+        bargap=0.3,
+    )
+    fig.update_xaxes(showgrid=False)
     return fig
 
 

@@ -1,4 +1,5 @@
 {
   "Visa": "open_loop",
-  "Mastercard": "open_loop"
+  "Mastercard": "open_loop",
+  "Amazon": "amazon"
 }

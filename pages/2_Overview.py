@@ -109,10 +109,19 @@ with c_right:
     fig_ba.update_xaxes(showgrid=False)
     st.plotly_chart(fig_ba, use_container_width=True)
 
-weekly = calculator.weekly_trend(df)
-if len(weekly) >= 3:
-    section_label("Week-on-Week Breakage Rate")
-    st.plotly_chart(charts.weekly_trend_chart(weekly), use_container_width=True)
+w_left, w_right = st.columns(2)
+
+with w_left:
+    weekly = calculator.weekly_trend(df, currency=currency or "")
+    if len(weekly) >= 3:
+        section_label("Week-on-Week Breakage Rate")
+        st.plotly_chart(charts.weekly_trend_chart(weekly), use_container_width=True)
+
+with w_right:
+    dow = calculator.breakage_by_dow(df)
+    if not dow.empty and dow["total"].sum() > 0:
+        section_label("Breakage by Day of Week")
+        st.plotly_chart(charts.dow_breakage_chart(dow), use_container_width=True)
 
 st.markdown("")
 
