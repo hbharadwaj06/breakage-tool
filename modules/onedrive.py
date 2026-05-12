@@ -2,13 +2,13 @@ import streamlit as st
 import requests
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
 
 def is_configured() -> bool:
     try:
         return bool(
             st.secrets.get("onedrive_client_id")
+            and st.secrets.get("onedrive_tenant_id")
             and st.secrets.get("onedrive_refresh_token")
             and st.secrets.get("onedrive_folder")
         )
@@ -18,8 +18,9 @@ def is_configured() -> bool:
 
 @st.cache_data(ttl=3000)
 def _get_token() -> str:
+    tenant_id = st.secrets["onedrive_tenant_id"]
     resp = requests.post(
-        TOKEN_URL,
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
         data={
             "client_id": st.secrets["onedrive_client_id"],
             "refresh_token": st.secrets["onedrive_refresh_token"],
