@@ -97,7 +97,7 @@ with c_right:
         x=[charts._fmt_month(m) for m in trend["redemption_month"]],
         y="breakage_amount",
         labels={"x": "", "breakage_amount": f"Amount ({currency})"},
-        color_discrete_sequence=["#ff6d05"],
+        color_discrete_sequence=["#ff6d05"],  # accent orange for breakage amount
         text=trend["breakage_amount"].map(lambda v: calculator.fmt_amount(v, currency)),
     )
     fig_ba.update_traces(textposition="outside", textfont_size=9, marker_opacity=0.85)
@@ -150,7 +150,7 @@ with chart_col:
         fig_br = px.bar(
             top8, x="breakage_rate", y="brand", orientation="h",
             labels={"breakage_rate": "Breakage Rate %", "brand": ""},
-            color_discrete_sequence=["#654ab7"],
+            color_discrete_sequence=["#5b3b97"],  # brand-500
             text=top8["breakage_rate"].map(lambda v: f"{v}%"),
         )
         fig_br.update_traces(textposition="outside", textfont_size=9, marker_opacity=0.85)

@@ -58,12 +58,12 @@ period_label = start_month if start_month == end_month else f"{start_month} → 
 
 # ── Answer card ───────────────────────────────────────────────────────────────
 st.markdown(
-    f'<div style="background:linear-gradient(135deg,#fef3ed,#f4f5fe);border-radius:14px;'
-    f'padding:20px 28px;margin-bottom:20px;border:1px solid #ededf5;'
-    f'box-shadow:0 2px 12px rgba(41,41,76,0.07)">'
-    f'<div style="font-size:0.72em;font-weight:700;text-transform:uppercase;'
-    f'letter-spacing:0.09em;color:#ff6d05;margin-bottom:6px">Query Result</div>'
-    f'<div style="font-size:0.9em;color:#6b7280">'
+    f'<div style="background:linear-gradient(135deg,var(--brand-25),var(--neutral-50));'
+    f'border-radius:var(--radius-xl);padding:20px 28px;margin-bottom:20px;'
+    f'border:1px solid var(--neutral-200);box-shadow:var(--shadow-sm)">'
+    f'<div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+    f'letter-spacing:0.05em;color:var(--accent);margin-bottom:6px">Query Result</div>'
+    f'<div style="font-size:0.875rem;color:var(--text-secondary)">'
     f'<strong>{currency}</strong> &nbsp;·&nbsp; {period_label} &nbsp;·&nbsp; '
     f'{k["total"]:,} total records'
     f'{"  ·  " + ", ".join(companies) if companies else ""}'

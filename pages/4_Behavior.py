@@ -47,8 +47,8 @@ with toggle_col:
 with legend_col:
     st.markdown(
         "<div style='display:flex;gap:10px;align-items:center;margin-top:8px'>"
-        "<span style='background:#007528;color:white;padding:3px 12px;border-radius:5px;font-size:0.8em;font-weight:600'>■ Activated</span>"
-        "<span style='background:#9c0006;color:white;padding:3px 12px;border-radius:5px;font-size:0.8em;font-weight:600'>■ Breakage (Never)</span>"
+        "<span style='background:var(--color-success);color:white;padding:3px 12px;border-radius:var(--radius-xs);font-size:0.8125rem;font-weight:600'>■ Activated</span>"
+        "<span style='background:var(--color-error);color:white;padding:3px 12px;border-radius:var(--radius-xs);font-size:0.8125rem;font-weight:600'>■ Breakage (Never)</span>"
         "</div>",
         unsafe_allow_html=True,
     )

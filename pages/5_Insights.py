@@ -75,11 +75,11 @@ for i, curr in enumerate(primary):
         continue
     if i > 0:
         st.markdown("""
-        <hr style="border:none;border-top:2px solid #ededf5;margin:32px 0 24px">
+        <hr style="border:none;border-top:2px solid var(--neutral-200);margin:32px 0 24px">
         """, unsafe_allow_html=True)
     st.markdown(
-        f'<div style="display:inline-block;background:#ff6d05;color:white;'
-        f'padding:4px 14px;border-radius:20px;font-size:0.85em;font-weight:700;'
+        f'<div style="display:inline-block;background:var(--accent);color:white;'
+        f'padding:4px 14px;border-radius:var(--radius-pill);font-size:0.8125rem;font-weight:600;'
         f'margin-bottom:16px">{curr}</div>',
         unsafe_allow_html=True,
     )
@@ -90,12 +90,12 @@ for i, curr in enumerate(primary):
 if others:
     if primary:
         st.markdown("""
-        <hr style="border:none;border-top:2px solid #ededf5;margin:32px 0 24px">
+        <hr style="border:none;border-top:2px solid var(--neutral-200);margin:32px 0 24px">
         """, unsafe_allow_html=True)
 
     st.markdown(
-        f'<div style="display:inline-block;background:#654ab7;color:white;'
-        f'padding:4px 14px;border-radius:20px;font-size:0.85em;font-weight:700;'
+        f'<div style="display:inline-block;background:var(--brand-500);color:white;'
+        f'padding:4px 14px;border-radius:var(--radius-pill);font-size:0.8125rem;font-weight:600;'
         f'margin-bottom:8px">Other Currencies</div>',
         unsafe_allow_html=True,
     )
@@ -122,9 +122,9 @@ if others:
         hcols = st.columns([0.8, 1.5, 1.5, 1, 1.2, 1, 1.6])
         for col, lbl in zip(hcols, ["Currency", "Total Redeemed", "Breakage Amount",
                                      "Breakage Rate", "Not Activated", "Total Cards", ""]):
-            col.markdown(f"<span style='font-size:0.72em;font-weight:700;text-transform:uppercase;"
-                         f"letter-spacing:0.08em;color:#9ca3af'>{lbl}</span>", unsafe_allow_html=True)
-        st.markdown("<hr style='border:none;border-top:1px solid #ededf5;margin:4px 0 10px'>",
+            col.markdown(f"<span style='font-size:0.6875rem;font-weight:700;text-transform:uppercase;"
+                         f"letter-spacing:0.05em;color:var(--neutral-400)'>{lbl}</span>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:none;border-top:1px solid var(--neutral-200);margin:4px 0 10px'>",
                     unsafe_allow_html=True)
 
         for row in summary_rows:
@@ -145,12 +145,12 @@ if others:
         df_extra = df[df["Currency"] == extra]
         if not df_extra.empty:
             st.markdown("""
-            <hr style="border:none;border-top:2px solid #ededf5;margin:28px 0 20px">
+            <hr style="border:none;border-top:2px solid var(--neutral-200);margin:28px 0 20px">
             """, unsafe_allow_html=True)
             col_title, col_close = st.columns([5, 1])
             col_title.markdown(
-                f'<div style="display:inline-block;background:#29294c;color:white;'
-                f'padding:4px 14px;border-radius:20px;font-size:0.85em;font-weight:700">'
+                f'<div style="display:inline-block;background:var(--neutral-600);color:white;'
+                f'padding:4px 14px;border-radius:var(--radius-pill);font-size:0.8125rem;font-weight:600">'
                 f'{extra} — Full Insights</div>',
                 unsafe_allow_html=True,
             )

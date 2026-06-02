@@ -76,10 +76,13 @@ def sidebar_user_widget():
     with st.sidebar:
         st.markdown("""
         <div style="padding:20px 16px 14px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:6px">
-            <div style="font-size:1.05em;font-weight:700;color:white;letter-spacing:-0.01em">
-                📊 Breakage Analysis
+            <div style="display:flex;align-items:center;gap:10px;font-size:1rem;font-weight:700;color:white;letter-spacing:-0.01em">
+                <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:rgba(255,109,5,0.18);border-radius:8px;flex-shrink:0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6d05" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/><path d="M15 15l-2-2-2 2"/></svg>
+                </div>
+                Breakage Analysis
             </div>
-            <div style="font-size:0.72em;color:rgba(200,200,232,0.6);margin-top:3px">
+            <div style="font-size:0.75rem;color:rgba(255,255,255,0.5);margin-top:3px">
                 Vantage Circle · Internal
             </div>
         </div>
@@ -90,11 +93,11 @@ def sidebar_user_widget():
         st.markdown("""<div style="margin-top:auto"></div>""", unsafe_allow_html=True)
         st.markdown("---")
         role_badge = "Admin" if is_admin() else "Viewer"
-        role_color = "#ff8c38" if is_admin() else "#c8c8e8"
+        role_color = "var(--accent)" if is_admin() else "rgba(255,255,255,0.5)"
         st.markdown(
             f'<div style="padding:0 4px 8px">'
-            f'<div style="font-size:0.88em;color:#c8c8e8;font-weight:500">{current_user()}</div>'
-            f'<div style="font-size:0.72em;color:{role_color};margin-top:2px">● {role_badge}</div>'
+            f'<div style="font-size:0.875rem;color:rgba(255,255,255,0.75);font-weight:500">{current_user()}</div>'
+            f'<div style="font-size:0.75rem;color:{role_color};margin-top:2px">● {role_badge}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )

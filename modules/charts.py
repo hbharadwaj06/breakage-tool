@@ -2,7 +2,18 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-_PALETTE = px.colors.qualitative.Set2
+# Design-system-aligned chart palette
+_PALETTE = [
+    "#5b3b97",  # brand-500 purple
+    "#ff6d05",  # accent orange
+    "#a086d0",  # brand-300 lavender
+    "#0ba5ec",  # info blue
+    "#12b76a",  # success green
+    "#f79009",  # warning amber
+    "#f04438",  # error red
+    "#475467",  # neutral-600
+    "#7a56bd",  # brand-400
+]
 
 
 def _fmt_month(m_str: str) -> str:

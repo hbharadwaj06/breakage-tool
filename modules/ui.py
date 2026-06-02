@@ -5,232 +5,322 @@ _PRIMARY = ["USD", "INR"]
 # ── Vantage Circle Design System CSS ─────────────────────────────────────────
 VC_CSS = """
 <style>
-/* ── Chrome & defaults ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Design system tokens ── */
+:root {
+  --brand-25:  #f6f4fb;
+  --brand-50:  #f1edf8;
+  --brand-100: #e2daf1;
+  --brand-200: #c5b5e2;
+  --brand-300: #a086d0;
+  --brand-400: #7a56bd;
+  --brand-500: #5b3b97;
+  --brand-600: #472e75;
+
+  --neutral-50:  #f5f5f7;
+  --neutral-100: #eff2f5;
+  --neutral-200: #eef0f4;
+  --neutral-300: #d9dde7;
+  --neutral-400: #637281;
+  --neutral-500: #5c6c7c;
+  --neutral-600: #475467;
+
+  --text-primary:   #33475b;
+  --text-secondary: #5c6c7c;
+  --color-white:    #ffffff;
+
+  --color-success:  #28a745;
+  --color-error:    #dc3545;
+  --color-warning:  #ffc107;
+
+  --color-focus: rgba(91, 59, 151, 0.25);
+
+  --accent:       #ff6d05;
+  --accent-hover: #e06000;
+
+  --radius:      8px;
+  --radius-md:   10px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-pill: 50px;
+
+  --shadow-xs: 0px 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0px 1px 3px rgba(16, 24, 40, 0.10), 0px 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0px 4px 8px rgba(16, 24, 40, 0.10), 0px 2px 4px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0px 12px 16px rgba(16, 24, 40, 0.08), 0px 4px 6px rgba(16, 24, 40, 0.03);
+
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Global base ── */
+html, body, [class*="css"] {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
 #MainMenu { visibility: hidden; }
-footer { visibility: hidden; }
-[data-testid="stHeader"] { background: transparent !important; height: 0 !important; }
-[data-testid="stToolbar"] { display: none !important; }
+footer    { visibility: hidden; }
+[data-testid="stHeader"]     { background: transparent !important; height: 0 !important; }
+[data-testid="stToolbar"]    { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
 
-/* ── Main content background ── */
-.main { background: #f4f5fe !important; }
+/* ── Page background ── */
+.main { background: var(--neutral-50) !important; }
 .block-container {
-    padding-top: 1.4rem !important;
+    padding-top:    1.4rem !important;
     padding-bottom: 2.5rem !important;
     max-width: 1280px !important;
 }
 
-/* ── Sidebar: VC dark navy ── */
+/* ── Sidebar — VC midnight navy ── */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #29294c 0%, #1e1e3a 100%) !important;
     border-right: none !important;
-    box-shadow: 4px 0 20px rgba(0,0,0,0.15) !important;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.18) !important;
 }
 section[data-testid="stSidebar"] > div:first-child {
     background: transparent !important;
 }
-/* Sidebar text */
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] label {
-    color: #c8c8e8 !important;
+    color: rgba(255, 255, 255, 0.7) !important;
 }
+
 /* Sidebar nav links */
 [data-testid="stSidebarNav"] a,
 [data-testid="stSidebarNav"] span {
-    color: #c8c8e8 !important;
-    border-radius: 8px !important;
-    font-size: 0.9em !important;
-    transition: all 0.18s ease !important;
+    color: rgba(255, 255, 255, 0.65) !important;
+    border-radius: var(--radius-lg) !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    transition: background-color var(--duration-base) var(--ease-in-out),
+                color var(--duration-base) var(--ease-in-out) !important;
 }
 [data-testid="stSidebarNav"] a:hover {
-    background: rgba(255,109,5,0.18) !important;
-    color: #ff8c38 !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
 }
 [data-testid="stSidebarNav"] a[aria-current="page"],
 [data-testid="stSidebarNav"] li[aria-selected="true"] a {
-    background: rgba(255,109,5,0.22) !important;
-    color: #ff6d05 !important;
+    background: rgba(255, 109, 5, 0.18) !important;
+    color: var(--accent) !important;
     font-weight: 600 !important;
-    border-left: 3px solid #ff6d05 !important;
+    border-left: 3px solid var(--accent) !important;
 }
+
 /* Sidebar sign-out button */
 section[data-testid="stSidebar"] .stButton > button {
-    background: rgba(255,109,5,0.12) !important;
-    color: #ff8c38 !important;
-    border: 1px solid rgba(255,109,5,0.35) !important;
-    border-radius: 8px !important;
-    font-size: 0.88em !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 255, 255, 0.65) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: var(--radius-pill) !important;
+    font-size: 0.8125rem !important;
     font-weight: 500 !important;
-    transition: all 0.18s ease !important;
+    transition: background-color var(--duration-base) var(--ease-in-out),
+                border-color var(--duration-base) var(--ease-in-out),
+                color var(--duration-base) var(--ease-in-out) !important;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #ff6d05 !important;
-    color: white !important;
-    border-color: #ff6d05 !important;
+    background: var(--accent) !important;
+    color: #ffffff !important;
+    border-color: var(--accent) !important;
 }
 
 /* ── KPI metric cards ── */
 [data-testid="metric-container"] {
-    background: white !important;
-    border-radius: 14px !important;
-    border: 1px solid #ededf5 !important;
-    border-top: 4px solid #ff6d05 !important;
-    padding: 22px 18px 18px !important;
-    box-shadow: 0 2px 16px rgba(41,41,76,0.07) !important;
-    transition: box-shadow 0.2s ease !important;
+    background: var(--color-white) !important;
+    border-radius: var(--radius-xl) !important;
+    border: 1px solid var(--neutral-200) !important;
+    border-left: 4px solid var(--brand-500) !important;
+    padding: 20px 18px 18px !important;
+    box-shadow: var(--shadow-sm) !important;
+    transition: box-shadow var(--duration-slow) var(--ease-out),
+                transform var(--duration-slow) var(--ease-out) !important;
 }
 [data-testid="metric-container"]:hover {
-    box-shadow: 0 4px 24px rgba(41,41,76,0.12) !important;
+    box-shadow: var(--shadow-md) !important;
+    transform: translateY(-2px) !important;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.7em !important;
+    font-size: 1.5rem !important;
     font-weight: 700 !important;
-    color: #29294c !important;
+    color: var(--text-primary) !important;
     letter-spacing: -0.02em !important;
+    line-height: 1.2 !important;
 }
 [data-testid="stMetricLabel"] {
-    font-size: 0.7em !important;
+    font-size: 0.6875rem !important;
     font-weight: 700 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.09em !important;
-    color: #9ca3af !important;
+    letter-spacing: 0.05em !important;
+    color: var(--neutral-400) !important;
 }
 [data-testid="stMetricDelta"] svg { display: none !important; }
 [data-testid="stMetricDelta"] > div {
-    font-size: 0.8em !important;
+    font-size: 0.8125rem !important;
     font-weight: 500 !important;
 }
 
-/* ── Filter bar container ── */
+/* ── Filter / container borders ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
-    background: white !important;
-    border: 1px solid #ededf5 !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 8px rgba(41,41,76,0.06) !important;
+    background: var(--color-white) !important;
+    border: 1px solid var(--neutral-200) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-xs) !important;
     padding: 4px 8px !important;
 }
 
 /* ── Buttons (main area) ── */
 .main .stButton > button {
-    background: white !important;
-    border: 1.5px solid #ededf5 !important;
-    border-radius: 8px !important;
-    color: #29294c !important;
+    background: var(--color-white) !important;
+    border: 1.5px solid var(--neutral-300) !important;
+    border-radius: var(--radius-pill) !important;
+    color: var(--text-primary) !important;
     font-weight: 500 !important;
-    transition: all 0.18s ease !important;
+    font-size: 0.8125rem !important;
+    transition: background-color var(--duration-base) var(--ease-in-out),
+                border-color var(--duration-base) var(--ease-in-out),
+                color var(--duration-base) var(--ease-in-out),
+                box-shadow var(--duration-slow) var(--ease-out),
+                transform var(--duration-slow) var(--ease-out) !important;
 }
 .main .stButton > button:hover {
-    border-color: #ff6d05 !important;
-    color: #ff6d05 !important;
-    background: rgba(255,109,5,0.05) !important;
+    border-color: var(--brand-500) !important;
+    color: var(--brand-500) !important;
+    background: var(--brand-25) !important;
+    box-shadow: var(--shadow-md) !important;
+    transform: translateY(-1px) !important;
+}
+.main .stButton > button:focus-visible {
+    box-shadow: 0 0 0 4px var(--color-focus) !important;
+    outline: none !important;
 }
 .main .stButton > button[kind="primary"] {
-    background: #ff6d05 !important;
-    color: white !important;
+    background: var(--brand-500) !important;
+    color: var(--color-white) !important;
     border: none !important;
-    box-shadow: 0 2px 8px rgba(255,109,5,0.35) !important;
+    box-shadow: 0 2px 8px rgba(91, 59, 151, 0.35) !important;
+}
+.main .stButton > button[kind="primary"]:hover {
+    background: var(--brand-600) !important;
+    color: var(--color-white) !important;
 }
 
 /* ── Expanders ── */
 [data-testid="stExpander"] {
-    border: 1px solid #ededf5 !important;
-    border-radius: 12px !important;
-    background: white !important;
-    box-shadow: 0 1px 6px rgba(41,41,76,0.05) !important;
-    overflow: hidden;
+    border: 1px solid var(--neutral-200) !important;
+    border-radius: var(--radius-lg) !important;
+    background: var(--color-white) !important;
+    box-shadow: var(--shadow-xs) !important;
+    overflow: hidden !important;
 }
 [data-testid="stExpander"] summary {
     font-weight: 600 !important;
-    color: #29294c !important;
+    color: var(--text-primary) !important;
+    font-size: 0.875rem !important;
 }
 
 /* ── Data tables ── */
 [data-testid="stDataFrame"] {
-    border-radius: 12px !important;
+    border-radius: var(--radius-lg) !important;
     overflow: hidden !important;
-    box-shadow: 0 1px 8px rgba(41,41,76,0.07) !important;
-    border: 1px solid #ededf5 !important;
+    box-shadow: var(--shadow-sm) !important;
+    border: 1px solid var(--neutral-200) !important;
 }
 
 /* ── Slider ── */
 [data-testid="stSlider"] [data-baseweb="slider"] [role="slider"] {
-    background: #ff6d05 !important;
-    border-color: #ff6d05 !important;
+    background: var(--brand-500) !important;
+    border-color: var(--brand-500) !important;
 }
-[data-baseweb="slider"] [data-testid="stTickBar"] { color: #9ca3af !important; }
+[data-baseweb="slider"] [data-testid="stTickBar"] {
+    color: var(--neutral-400) !important;
+}
 
-/* ── Select/Multiselect ── */
+/* ── Select / Multiselect ── */
 [data-baseweb="select"] > div:first-child {
-    border-radius: 8px !important;
-    border-color: #ededf5 !important;
+    border-radius: var(--radius) !important;
+    border-color: var(--neutral-300) !important;
+    background: var(--color-white) !important;
 }
 [data-baseweb="select"] > div:first-child:focus-within {
-    border-color: #ff6d05 !important;
-    box-shadow: 0 0 0 2px rgba(255,109,5,0.15) !important;
+    border-color: var(--brand-500) !important;
+    box-shadow: 0 0 0 3px var(--color-focus) !important;
 }
 
 /* ── Radio (currency selector) ── */
-.stRadio > label { display: none; }
+.stRadio > label { display: none !important; }
 .stRadio [data-baseweb="radio"] { gap: 6px !important; }
 .stRadio [data-baseweb="radio"] label {
-    background: white;
-    border: 1.5px solid #ededf5;
-    border-radius: 8px;
+    background: var(--color-white) !important;
+    border: 1.5px solid var(--neutral-300) !important;
+    border-radius: var(--radius-pill) !important;
     padding: 5px 14px !important;
-    font-size: 0.88em !important;
+    font-size: 0.8125rem !important;
     font-weight: 500 !important;
-    color: #29294c !important;
-    cursor: pointer;
-    transition: all 0.15s ease !important;
+    color: var(--text-primary) !important;
+    cursor: pointer !important;
+    transition: background-color var(--duration-fast) var(--ease-in-out),
+                border-color var(--duration-fast) var(--ease-in-out),
+                color var(--duration-fast) var(--ease-in-out) !important;
 }
 .stRadio [data-baseweb="radio"] label:hover {
-    border-color: #ff6d05 !important;
-    color: #ff6d05 !important;
+    border-color: var(--brand-500) !important;
+    color: var(--brand-500) !important;
+    background: var(--brand-25) !important;
 }
 [data-baseweb="radio"][data-checked="true"] + label,
 .stRadio [aria-checked="true"] + label {
-    background: #ff6d05 !important;
-    border-color: #ff6d05 !important;
-    color: white !important;
+    background: var(--brand-500) !important;
+    border-color: var(--brand-500) !important;
+    color: var(--color-white) !important;
 }
 
-/* ── Tabs (if used) ── */
+/* ── Tabs ── */
 [data-baseweb="tab-list"] {
-    gap: 4px;
-    background: #f4f5fe;
-    border-radius: 10px;
-    padding: 4px;
+    gap: 4px !important;
+    background: var(--neutral-100) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 4px !important;
 }
 [data-baseweb="tab"] {
-    border-radius: 8px !important;
+    border-radius: var(--radius) !important;
     font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    color: var(--text-secondary) !important;
+    transition: background-color var(--duration-base) var(--ease-in-out),
+                color var(--duration-base) var(--ease-in-out) !important;
 }
 [aria-selected="true"][data-baseweb="tab"] {
-    background: white !important;
-    color: #ff6d05 !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important;
+    background: var(--color-white) !important;
+    color: var(--brand-500) !important;
+    box-shadow: var(--shadow-xs) !important;
 }
 
 /* ── Dividers ── */
 hr {
     border: none !important;
-    border-top: 1px solid #ededf5 !important;
+    border-top: 1px solid var(--neutral-200) !important;
     margin: 20px 0 !important;
 }
 
 /* ── Plotly chart containers ── */
 [data-testid="stPlotlyChart"] {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 1px 8px rgba(41,41,76,0.07);
-    border: 1px solid #ededf5;
-    padding: 8px;
+    background: var(--color-white) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    border: 1px solid var(--neutral-200) !important;
+    padding: 8px !important;
 }
 
-/* ── Alerts & info boxes ── */
+/* ── Alerts ── */
 [data-testid="stAlert"] {
-    border-radius: 10px !important;
+    border-radius: var(--radius-lg) !important;
+    font-size: 0.875rem !important;
 }
 </style>
 """
@@ -242,20 +332,29 @@ def apply_theme():
 
 
 def page_header(title: str, meta: str = ""):
-    meta_html = f'<div style="font-size:0.8em;color:#9ca3af;margin-top:3px">{meta}</div>' if meta else ""
+    meta_html = (
+        f'<div style="font-size:0.75rem;color:var(--neutral-400);margin-top:3px;'
+        f'font-weight:400">{meta}</div>'
+        if meta else ""
+    )
     st.markdown(f"""
     <div style="
-        background:white; border-radius:14px; padding:18px 24px;
-        margin-bottom:18px; display:flex; align-items:center; gap:16px;
-        box-shadow:0 2px 12px rgba(41,41,76,0.07); border:1px solid #ededf5;
+        background:var(--color-white); border-radius:var(--radius-xl);
+        padding:18px 24px; margin-bottom:18px;
+        display:flex; align-items:center; gap:16px;
+        box-shadow:var(--shadow-sm); border:1px solid var(--neutral-200);
     ">
         <div style="
-            width:5px; min-height:40px; border-radius:3px;
-            background:linear-gradient(180deg,#ff6d05 0%,#654ab7 100%);
+            width:4px; min-height:40px; border-radius:2px;
+            background:linear-gradient(180deg, var(--brand-500) 0%, var(--accent) 100%);
             flex-shrink:0;
         "></div>
         <div>
-            <div style="font-size:1.3em;font-weight:700;color:#29294c;letter-spacing:-0.01em">{title}</div>
+            <div style="
+                font-size:1.125rem; font-weight:700;
+                color:var(--text-primary); letter-spacing:-0.01em;
+                line-height:1.2; font-family:inherit;
+            ">{title}</div>
             {meta_html}
         </div>
     </div>
@@ -264,25 +363,31 @@ def page_header(title: str, meta: str = ""):
 
 def section_label(text: str):
     st.markdown(
-        f'<div style="font-size:0.72em;font-weight:700;letter-spacing:0.1em;'
-        f'text-transform:uppercase;color:#654ab7;margin:20px 0 8px">{text}</div>',
+        f'<div style="'
+        f'font-size:0.6875rem; font-weight:700; letter-spacing:0.05em;'
+        f'text-transform:uppercase; color:var(--brand-500);'
+        f'margin:20px 0 8px; font-family:inherit;'
+        f'">{text}</div>',
         unsafe_allow_html=True,
     )
 
 
 def insight_card(text: str, variant: str = "default"):
     colors = {
-        "default": "#ff6d05",
-        "alert":   "#f15162",
-        "neutral": "#654ab7",
-        "warn":    "#ff9e33",
+        "default": "var(--brand-500)",
+        "alert":   "var(--color-error)",
+        "neutral": "var(--neutral-500)",
+        "warn":    "var(--color-warning)",
     }
-    color = colors.get(variant, "#ff6d05")
+    border = colors.get(variant, "var(--brand-500)")
     st.markdown(f"""
     <div style="
-        background:white; border-left:4px solid {color}; border-radius:8px;
-        padding:14px 18px; margin-bottom:10px; font-size:0.95em; line-height:1.65;
-        color:#1f2937; box-shadow:0 1px 6px rgba(41,41,76,0.06);
+        background:var(--color-white); border-left:4px solid {border};
+        border-radius:var(--radius-lg); padding:14px 18px; margin-bottom:10px;
+        font-size:0.875rem; line-height:1.65; color:var(--text-primary);
+        box-shadow:var(--shadow-xs); border-top:1px solid var(--neutral-200);
+        border-right:1px solid var(--neutral-200); border-bottom:1px solid var(--neutral-200);
+        font-family:inherit;
     ">{text}</div>
     """, unsafe_allow_html=True)
 
@@ -290,10 +395,11 @@ def insight_card(text: str, variant: str = "default"):
 def summary_card(text: str):
     st.markdown(f"""
     <div style="
-        background:linear-gradient(135deg,#fef3ed 0%,#f4f5fe 100%);
-        border-left:4px solid #ff6d05; border-radius:12px;
-        padding:20px 26px; margin-bottom:20px; font-size:1em; line-height:1.8;
-        color:#29294c; box-shadow:0 2px 10px rgba(41,41,76,0.07);
+        background:linear-gradient(135deg, var(--brand-25) 0%, var(--neutral-50) 100%);
+        border-left:4px solid var(--brand-500);
+        border-radius:var(--radius-xl); padding:20px 26px; margin-bottom:20px;
+        font-size:0.875rem; line-height:1.8; color:var(--text-primary);
+        box-shadow:var(--shadow-sm); font-family:inherit;
     ">{text}</div>
     """, unsafe_allow_html=True)
 
@@ -341,10 +447,9 @@ def top_filters(
     """
     all_months = sorted(df_raw["redemption_month"].dropna().unique().astype(str).tolist())
 
-    # Count visible columns: currency gets 1.2, months get 2, companies get 2
     weights = []
-    if show_currency: weights.append(1.3)
-    if show_months:   weights.append(2.2)
+    if show_currency:  weights.append(1.3)
+    if show_months:    weights.append(2.2)
     if show_companies: weights.append(2.0)
 
     results: dict = {}
@@ -356,8 +461,9 @@ def top_filters(
         if show_currency:
             with cols[col_idx]:
                 st.markdown(
-                    '<p style="font-size:0.7em;font-weight:700;text-transform:uppercase;'
-                    'letter-spacing:0.09em;color:#ff6d05;margin-bottom:2px">Currency</p>',
+                    '<p style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+                    'letter-spacing:0.05em;color:var(--accent);margin-bottom:2px;'
+                    'font-family:inherit">Currency</p>',
                     unsafe_allow_html=True,
                 )
                 results["currency"] = currency_selector(df_raw, key_prefix=key_prefix)
@@ -366,8 +472,9 @@ def top_filters(
         if show_months and all_months:
             with cols[col_idx]:
                 st.markdown(
-                    '<p style="font-size:0.7em;font-weight:700;text-transform:uppercase;'
-                    'letter-spacing:0.09em;color:#ff6d05;margin-bottom:2px">Period</p>',
+                    '<p style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+                    'letter-spacing:0.05em;color:var(--accent);margin-bottom:2px;'
+                    'font-family:inherit">Period</p>',
                     unsafe_allow_html=True,
                 )
                 results["date_range"] = st.select_slider(
@@ -384,8 +491,9 @@ def top_filters(
         if show_companies:
             with cols[col_idx]:
                 st.markdown(
-                    '<p style="font-size:0.7em;font-weight:700;text-transform:uppercase;'
-                    'letter-spacing:0.09em;color:#ff6d05;margin-bottom:2px">Company</p>',
+                    '<p style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+                    'letter-spacing:0.05em;color:var(--accent);margin-bottom:2px;'
+                    'font-family:inherit">Company</p>',
                     unsafe_allow_html=True,
                 )
                 results["companies"] = st.multiselect(

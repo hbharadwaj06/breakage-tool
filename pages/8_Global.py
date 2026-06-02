@@ -148,8 +148,8 @@ if convertible:
     ])
     fig = px.pie(
         pie_df, names="Currency", values="Breakage",
-        color_discrete_sequence=["#ff6d05", "#654ab7", "#29294c", "#f15162", "#ffa44f",
-                                  "#8b5cf6", "#06b6d4", "#10b981", "#f59e0b"],
+        color_discrete_sequence=["#ff6d05", "#5b3b97", "#29294c", "#f04438", "#f79009",
+                                  "#7a56bd", "#0ba5ec", "#12b76a", "#a086d0"],
         hole=0.45,
     )
     fig.update_traces(textposition="outside", textinfo="percent+label")

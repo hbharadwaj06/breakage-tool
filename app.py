@@ -1,5 +1,6 @@
 import streamlit as st
 from modules.auth import require_login, is_admin, sidebar_user_widget
+from modules.ui import apply_theme
 
 st.set_page_config(
     page_title="Breakage Analysis — Vantage Circle",
@@ -8,6 +9,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+apply_theme()
 require_login()
 sidebar_user_widget()
 
