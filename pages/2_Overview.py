@@ -2,16 +2,14 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from modules import calculator, charts
-from modules.loader import apply_filters
+from modules.loader import apply_filters, ensure_loaded
 from modules.auth import require_login
 from modules.ui import apply_theme, page_header, section_label, insight_card, top_filters
 
 require_login()
 apply_theme()
 
-if "df" not in st.session_state:
-    st.warning("No data loaded. Go to the **Upload** page first.")
-    st.stop()
+ensure_loaded()
 
 df_raw: pd.DataFrame = st.session_state["df"]
 

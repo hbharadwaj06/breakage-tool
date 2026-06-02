@@ -1,3 +1,4 @@
+import datetime
 import functools
 import io
 import json
@@ -12,7 +13,11 @@ REQUIRED_COLUMNS = [
 ]
 
 BRAND_TYPES_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "brand_types.json")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR    = os.path.join(os.path.dirname(__file__), "..", "data")
+RAW_DIR     = os.path.join(DATA_DIR, "raw")
+STORE_PATH  = os.path.join(DATA_DIR, "store.parquet")
+SNAP_DIR    = os.path.join(DATA_DIR, "snapshots")
+MAX_SNAPSHOTS = 10
 
 
 @functools.lru_cache(maxsize=1)
@@ -21,10 +26,51 @@ def load_brand_types() -> dict:
         return json.load(f)
 
 
-# ── Persistent store helpers ──────────────────────────────────────────────────
+def ensure_loaded() -> None:
+    """Call at the top of any page that needs data.
+    - If df is already in session state: does nothing.
+    - If store exists: auto-loads with a spinner, then reruns so the page renders with data.
+    - If no store at all: shows a welcome screen with a button to go upload data.
+    """
+    import streamlit as st
+
+    if "df" in st.session_state:
+        return
+
+    has_store = os.path.exists(STORE_PATH)
+    has_raw   = os.path.exists(RAW_DIR) and any(
+        f.endswith(".csv.gz") for f in os.listdir(RAW_DIR)
+    ) if os.path.exists(RAW_DIR) else False
+
+    if has_store or has_raw:
+        with st.spinner("Loading data…"):
+            df, warnings = load_from_store()
+        for w in warnings:
+            st.warning(w)
+        if df is not None:
+            st.session_state["df"] = df
+            st.rerun()
+        else:
+            st.error("Could not load data store. Go to Upload → Rebuild Store.")
+            st.stop()
+    else:
+        # No data at all — show welcome screen
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        col_l, col_m, col_r = st.columns([1, 2, 1])
+        with col_m:
+            st.markdown("## Welcome to Breakage Analysis")
+            st.markdown(
+                "No data has been loaded yet. Upload your monthly CSV files to get started."
+            )
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Go to Upload page", type="primary", use_container_width=True):
+                st.switch_page("pages/1_Upload.py")
+        st.stop()
+
+
+# ── Remote backend (Supabase / OneDrive) ─────────────────────────────────────
 
 def _remote_backend():
-    """Returns the configured remote storage module (gdrive or onedrive), or None."""
     from modules import gdrive, onedrive
     if gdrive.is_configured():
         return gdrive
@@ -33,37 +79,146 @@ def _remote_backend():
     return None
 
 
+# ── Local store helpers ───────────────────────────────────────────────────────
+
 def get_stored_files() -> list:
+    """Return list of source file names (without .gz) available in raw/ or remote."""
     backend = _remote_backend()
     if backend:
         return backend.list_csv_files()
-    os.makedirs(DATA_DIR, exist_ok=True)
-    return sorted([f for f in os.listdir(DATA_DIR) if f.lower().endswith(".csv")])
+    os.makedirs(RAW_DIR, exist_ok=True)
+    return sorted(
+        f.replace(".csv.gz", ".csv")
+        for f in os.listdir(RAW_DIR)
+        if f.lower().endswith(".csv.gz")
+    )
 
 
 def save_uploaded_file(uploaded_file) -> None:
     backend = _remote_backend()
     if backend:
         backend.upload_csv(uploaded_file.name, bytes(uploaded_file.getbuffer()))
-    else:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        path = os.path.join(DATA_DIR, uploaded_file.name)
-        with open(path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        return
+
+    os.makedirs(RAW_DIR, exist_ok=True)
+
+    # Validate columns before saving
+    try:
+        preview = pd.read_csv(io.BytesIO(uploaded_file.getbuffer()), nrows=5)
+    except Exception as e:
+        raise ValueError(f"Cannot parse CSV: {e}")
+    missing = [c for c in REQUIRED_COLUMNS if c not in preview.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    gz_name = uploaded_file.name.replace(".csv", "") + ".csv.gz"
+    path = os.path.join(RAW_DIR, gz_name)
+    content = bytes(uploaded_file.getbuffer())
+    df = pd.read_csv(io.BytesIO(content), low_memory=False)
+    df[REQUIRED_COLUMNS].to_csv(path, index=False, compression="gzip")
+
+    rebuild_store()
 
 
 def delete_stored_file(filename: str) -> None:
     backend = _remote_backend()
     if backend:
         backend.delete_csv(filename)
-    else:
-        path = os.path.join(DATA_DIR, filename)
-        if os.path.exists(path):
-            os.remove(path)
+        return
 
+    gz_name = filename.replace(".csv", "") + ".csv.gz"
+    path = os.path.join(RAW_DIR, gz_name)
+    if os.path.exists(path):
+        os.remove(path)
+    rebuild_store()
+
+
+def rebuild_store() -> tuple:
+    """Re-read all raw CSVs, dedup, save store.parquet + a dated snapshot.
+    Returns (row_count, warnings)."""
+    os.makedirs(RAW_DIR, exist_ok=True)
+    os.makedirs(SNAP_DIR, exist_ok=True)
+
+    frames, warnings = [], []
+    for fname in sorted(os.listdir(RAW_DIR)):
+        if not fname.lower().endswith(".csv.gz"):
+            continue
+        path = os.path.join(RAW_DIR, fname)
+        try:
+            df = pd.read_csv(path, low_memory=False, compression="gzip")
+        except Exception as e:
+            warnings.append(f"{fname}: failed to read — {e}")
+            continue
+        missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+        if missing:
+            warnings.append(f"{fname}: missing columns {missing} — skipped")
+            continue
+        df = df[REQUIRED_COLUMNS].copy()
+        df["_source_file"] = fname.replace(".csv.gz", ".csv")
+        frames.append(df)
+
+    if not frames:
+        if os.path.exists(STORE_PATH):
+            os.remove(STORE_PATH)
+        return 0, warnings
+
+    merged = pd.concat(frames, ignore_index=True)
+    merged["Final Redemption Status"] = pd.to_numeric(
+        merged["Final Redemption Status"], errors="coerce"
+    ).fillna(0).astype(int)
+    merged["composite_key"] = (
+        merged["Reference ID"].astype(str).str.strip() + "|" +
+        merged["User_ID"].astype(str).str.strip() + "|" +
+        merged["Brand"].astype(str).str.strip()
+    )
+    before = len(merged)
+    merged = merged.sort_values("Final Redemption Status", ascending=False)
+    merged = merged.drop_duplicates(subset=["composite_key"], keep="first")
+    merged = merged.drop(columns=["composite_key"]).reset_index(drop=True)
+    dup_count = before - len(merged)
+    if dup_count:
+        warnings.append(f"Removed {dup_count:,} duplicate rows during rebuild.")
+
+    merged.to_parquet(STORE_PATH, index=False, compression="snappy")
+
+    # Save dated snapshot and prune old ones
+    today = datetime.date.today().isoformat()
+    snap_path = os.path.join(SNAP_DIR, f"store_{today}.parquet")
+    merged.to_parquet(snap_path, index=False, compression="snappy")
+    _prune_snapshots()
+
+    return len(merged), warnings
+
+
+def restore_snapshot(snapshot_filename: str) -> None:
+    """Copy a snapshot over store.parquet to roll back to that date."""
+    src = os.path.join(SNAP_DIR, snapshot_filename)
+    if not os.path.exists(src):
+        raise FileNotFoundError(f"Snapshot not found: {snapshot_filename}")
+    import shutil
+    shutil.copy2(src, STORE_PATH)
+
+
+def list_snapshots() -> list:
+    """Return snapshot filenames sorted newest-first."""
+    if not os.path.exists(SNAP_DIR):
+        return []
+    return sorted(
+        [f for f in os.listdir(SNAP_DIR) if f.endswith(".parquet")],
+        reverse=True,
+    )
+
+
+def _prune_snapshots():
+    snaps = list_snapshots()
+    for old in snaps[MAX_SNAPSHOTS:]:
+        os.remove(os.path.join(SNAP_DIR, old))
+
+
+# ── Load from store ───────────────────────────────────────────────────────────
 
 def load_from_store() -> tuple:
-    """Load and merge all CSVs from remote storage or local data/. Returns (df, warnings)."""
+    """Load from remote backend or local store.parquet. Returns (df, warnings)."""
     backend = _remote_backend()
     if backend:
         files = backend.list_csv_files()
@@ -90,14 +245,24 @@ def load_from_store() -> tuple:
         if dup_count:
             warnings.append(f"Removed {dup_count} duplicate rows across all stored files.")
         return merged, warnings
-    stored = get_stored_files()
-    if not stored:
-        return None, []
-    paths = [os.path.join(DATA_DIR, f) for f in stored]
-    return _load_paths(paths)
+
+    # Local: use store.parquet if available, else rebuild
+    if not os.path.exists(STORE_PATH):
+        raw_files = [f for f in os.listdir(RAW_DIR) if f.endswith(".csv.gz")] if os.path.exists(RAW_DIR) else []
+        if not raw_files:
+            return None, []
+        rebuild_store()
+
+    try:
+        df = pd.read_parquet(STORE_PATH)
+    except Exception as e:
+        return None, [f"store.parquet is corrupted ({e}). Use 'Rebuild Store' to recover."]
+
+    df = _clean(df)
+    return df, []
 
 
-# ── Core load / merge ─────────────────────────────────────────────────────────
+# ── Core load / merge (for preview of uploaded files before saving) ───────────
 
 def load_csvs(uploaded_files) -> tuple:
     frames = []
@@ -131,40 +296,8 @@ def load_csvs(uploaded_files) -> tuple:
     return merged, warnings
 
 
-def _load_paths(paths: list) -> tuple:
-    frames = []
-    warnings = []
-
-    for path in paths:
-        name = os.path.basename(path)
-        try:
-            raw = pd.read_csv(path)
-        except Exception as e:
-            warnings.append(f"{name}: failed to parse — {e}")
-            continue
-
-        missing = [c for c in REQUIRED_COLUMNS if c not in raw.columns]
-        if missing:
-            warnings.append(f"{name}: missing columns {missing} — skipped")
-            continue
-
-        raw["_source_file"] = name
-        frames.append(raw[REQUIRED_COLUMNS + ["_source_file"]])
-
-    if not frames:
-        return None, warnings
-
-    merged = pd.concat(frames, ignore_index=True)
-    merged = _clean(merged)
-    merged, dup_count = _dedup(merged)
-
-    if dup_count:
-        warnings.append(f"Removed {dup_count} duplicate rows across all stored files.")
-
-    return merged, warnings
-
-
 def _clean(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     df["Redemption Date"] = pd.to_datetime(df["Redemption Date"], errors="coerce")
     df["Activation Date"] = pd.to_datetime(df["Activation Date"], errors="coerce")
     df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
@@ -173,19 +306,17 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     df["User_ID"] = df["User_ID"].astype(str).str.strip()
     df["Brand"] = df["Brand"].astype(str).str.strip()
 
-    # Final Redemption Status: 1 = activated, 0 = not activated
     df["Final Redemption Status"] = pd.to_numeric(
         df["Final Redemption Status"], errors="coerce"
     ).fillna(0).astype(int)
 
     brand_types = load_brand_types()
-    # Vectorized brand type mapping: apply in reverse so first-listed keys take priority
     df["card_type"] = "closed_loop"
     brand_lower = df["Brand"].str.lower()
     for key, ctype in reversed(list(brand_types.items())):
         df.loc[brand_lower.str.contains(key.lower(), regex=False, na=False), "card_type"] = ctype
-    df["composite_key"] = df["Reference ID"] + "|" + df["User_ID"] + "|" + df["Brand"]
 
+    df["composite_key"] = df["Reference ID"] + "|" + df["User_ID"] + "|" + df["Brand"]
     df["is_activated"] = df["Final Redemption Status"] == 1
     df["is_breakage"] = df["Final Redemption Status"] == 0
     df["activation_lag_days"] = (df["Activation Date"] - df["Redemption Date"]).dt.days
@@ -197,7 +328,6 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
 
 def _dedup(df: pd.DataFrame) -> tuple:
     before = len(df)
-    # Activated records (1) take priority over unactivated (0) for the same card
     df = df.sort_values("Final Redemption Status", ascending=False)
     df = df.drop_duplicates(subset=["composite_key"], keep="first")
     return df.reset_index(drop=True), before - len(df)

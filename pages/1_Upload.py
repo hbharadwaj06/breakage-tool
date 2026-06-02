@@ -1,6 +1,9 @@
+import os
 import streamlit as st
 from modules.loader import (
-    load_csvs, get_stored_files, save_uploaded_file, delete_stored_file, load_from_store,
+    load_csvs, get_stored_files, save_uploaded_file, delete_stored_file,
+    load_from_store, rebuild_store, list_snapshots, restore_snapshot,
+    RAW_DIR, STORE_PATH, SNAP_DIR,
 )
 from modules.auth import require_login, is_admin
 from modules.ui import apply_theme, page_header
@@ -12,17 +15,24 @@ if not is_admin():
     st.stop()
 
 page_header("Upload Data", "Add new monthly CSV files · Admin only")
-
 st.markdown("---")
+
 
 # ── Stored files ──────────────────────────────────────────────────────────────
 st.subheader("Stored Data Files")
 stored = get_stored_files()
 
 if stored:
+    store_mb = os.path.getsize(STORE_PATH) / 1024 / 1024 if os.path.exists(STORE_PATH) else 0
+    raw_mb = sum(
+        os.path.getsize(os.path.join(RAW_DIR, f + ".gz"))
+        for f in stored
+        if os.path.exists(os.path.join(RAW_DIR, f + ".gz"))
+    ) / 1024 / 1024
     st.markdown(
-        f"**{len(stored)} file(s) on disk.** "
-        "Data loads automatically every time the app starts — only upload new months."
+        f"**{len(stored)} source file(s)** · "
+        f"Raw (compressed): **{raw_mb:.1f} MB** · "
+        f"Active store: **{store_mb:.1f} MB**"
     )
     for fname in stored:
         c1, c2 = st.columns([8, 1])
@@ -36,6 +46,7 @@ else:
     st.info("No files stored yet. Upload below to get started.")
 
 st.markdown("---")
+
 
 # ── Upload new files ──────────────────────────────────────────────────────────
 st.subheader("Upload New Files")
@@ -53,14 +64,61 @@ st.markdown(
 uploaded = st.file_uploader("Select one or more CSV files", type="csv", accept_multiple_files=True)
 
 if uploaded:
-    saved = []
+    saved, errors = [], []
     for uf in uploaded:
-        save_uploaded_file(uf)
-        saved.append(uf.name)
-    st.success(f"Saved: {', '.join(saved)}")
+        try:
+            save_uploaded_file(uf)
+            saved.append(uf.name)
+        except ValueError as e:
+            errors.append(f"**{uf.name}**: {e}")
+    if saved:
+        st.success(f"Saved and store rebuilt: {', '.join(saved)}")
+    for err in errors:
+        st.error(err)
     if "df" in st.session_state:
         del st.session_state["df"]
     st.rerun()
+
+st.markdown("---")
+
+
+# ── Recovery tools ────────────────────────────────────────────────────────────
+st.subheader("Recovery Tools")
+
+col_rebuild, col_snap = st.columns(2)
+
+with col_rebuild:
+    st.markdown("**Rebuild Store**")
+    st.caption("Re-reads all source files and rebuilds the active store from scratch. Use if data looks wrong.")
+    if st.button("Rebuild Store from Source Files", use_container_width=True):
+        with st.spinner("Rebuilding..."):
+            count, warnings = rebuild_store()
+        for w in warnings:
+            st.warning(w)
+        st.success(f"Store rebuilt — {count:,} unique records.")
+        if "df" in st.session_state:
+            del st.session_state["df"]
+        st.rerun()
+
+with col_snap:
+    st.markdown("**Restore a Snapshot**")
+    st.caption("Roll back the active store to a previous date. Source files are untouched.")
+    snaps = list_snapshots()
+    if snaps:
+        selected = st.selectbox("Choose snapshot", snaps, label_visibility="collapsed")
+        snap_mb = os.path.getsize(os.path.join(SNAP_DIR, selected)) / 1024 / 1024
+        st.caption(f"{snap_mb:.1f} MB")
+        if st.button("Restore This Snapshot", use_container_width=True):
+            restore_snapshot(selected)
+            if "df" in st.session_state:
+                del st.session_state["df"]
+            st.success(f"Restored to {selected}. Reload the app to see the data.")
+            st.rerun()
+    else:
+        st.info("No snapshots yet.")
+
+st.markdown("---")
+
 
 # ── Auto-load from store ──────────────────────────────────────────────────────
 if "df" not in st.session_state:
@@ -73,6 +131,7 @@ if "df" not in st.session_state:
         if df is not None:
             st.session_state["df"] = df
             st.rerun()
+
 
 # ── Summary + diagnostics ─────────────────────────────────────────────────────
 if "df" in st.session_state:
