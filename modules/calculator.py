@@ -701,3 +701,54 @@ def generate_full_insights(df: pd.DataFrame, currency: str) -> dict:
             )
 
     return out
+
+
+# ── Micro trend functions ─────────────────────────────────────────────────────
+
+def card_type_trends(df: pd.DataFrame) -> pd.DataFrame:
+    """Monthly card type composition and breakage rate. Returns tidy long-format df."""
+    tmp = df.copy()
+    tmp["month"] = tmp["redemption_month"].astype(str)
+    grouped = (
+        tmp.groupby(["month", "card_type"])
+        .agg(count=("Reference ID", "count"), breakage=("is_breakage", "sum"))
+        .reset_index()
+    )
+    monthly_total = grouped.groupby("month")["count"].transform("sum")
+    grouped["share_pct"] = (grouped["count"] / monthly_total * 100).round(1)
+    grouped["breakage_rate"] = (grouped["breakage"] / grouped["count"] * 100).round(1)
+    return grouped.sort_values(["month", "card_type"]).reset_index(drop=True)
+
+
+def brand_shift_trends(df: pd.DataFrame, recent_n: int = 3, prior_n: int = 3) -> pd.DataFrame:
+    """Compare brand share % between recent N months vs prior N months.
+    Returns df with columns: Brand, card_type, recent_share, prior_share, delta."""
+    sorted_months = sorted(df["redemption_month"].unique())
+    if len(sorted_months) < recent_n + 1:
+        return pd.DataFrame()
+    recent_months = sorted_months[-recent_n:]
+    prior_months  = sorted_months[-(recent_n + prior_n):-recent_n]
+    if not prior_months:
+        return pd.DataFrame()
+
+    recent_df = df[df["redemption_month"].isin(recent_months)]
+    prior_df  = df[df["redemption_month"].isin(prior_months)]
+
+    def share(frame):
+        total = len(frame)
+        if total == 0:
+            return pd.Series(dtype=float)
+        return frame.groupby("Brand")["Reference ID"].count() / total * 100
+
+    recent_share = share(recent_df).rename("recent_share")
+    prior_share  = share(prior_df).rename("prior_share")
+    ctype        = df.groupby("Brand")["card_type"].first()
+
+    result = (
+        pd.concat([recent_share, prior_share, ctype], axis=1)
+        .fillna(0)
+    )
+    result["delta"] = (result["recent_share"] - result["prior_share"]).round(2)
+    result = result[result["recent_share"] > 0.05].reset_index()
+    result.columns = ["Brand", "recent_share", "prior_share", "card_type", "delta"]
+    return result.sort_values("delta", ascending=False).reset_index(drop=True)

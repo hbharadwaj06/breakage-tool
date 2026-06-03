@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from modules import calculator, charts
+from modules import calculator, charts, reporter
 from modules.loader import apply_filters, ensure_loaded
 from modules.auth import require_login
 from modules.ui import apply_theme, page_header, section_label, top_filters
@@ -124,3 +124,20 @@ else:
     )
 
     st.plotly_chart(charts.lag_histogram(df), use_container_width=True)
+
+st.markdown("---")
+
+# ── Export ────────────────────────────────────────────────────────────────────
+with st.expander("📥 Download Behavior Report", expanded=False):
+    st.caption(f"Exports cohort matrix, activation timing stats, and lag distribution for **{currency}**.")
+    if st.button("Generate & Download", type="primary", key="gen_behavior_report"):
+        with st.spinner("Building report…"):
+            html = reporter.generate_behavior_report(df, currency, date_range)
+        fname = f"behavior_report_{currency}_{pd.Timestamp.now().strftime('%Y%m%d')}.html"
+        st.download_button(
+            "⬇ Download HTML Report",
+            data=html,
+            file_name=fname,
+            mime="text/html",
+            key="dl_behavior_report",
+        )

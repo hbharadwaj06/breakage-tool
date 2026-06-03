@@ -361,3 +361,103 @@ def breakage_trend_exec(trend_df: pd.DataFrame, prelim_months: frozenset = None)
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(gridcolor="#f0f0f0")
     return fig
+
+
+# ── Micro trend charts ────────────────────────────────────────────────────────
+
+_CARD_TYPE_COLORS = {
+    "amazon":     "#f79009",
+    "closed_loop": "#5b3b97",
+    "open_loop":  "#0ba5ec",
+}
+
+_CARD_TYPE_LABELS = {
+    "amazon":     "Amazon",
+    "closed_loop": "Closed Loop",
+    "open_loop":  "Open Loop (Mastercard)",
+}
+
+
+def card_type_composition_chart(trends_df: pd.DataFrame) -> go.Figure:
+    """Stacked bar: % share of each card type per month."""
+    fig = go.Figure()
+    for ctype in ["amazon", "closed_loop", "open_loop"]:
+        sub = trends_df[trends_df["card_type"] == ctype]
+        if sub.empty:
+            continue
+        fig.add_trace(go.Bar(
+            x=sub["month"],
+            y=sub["share_pct"],
+            name=_CARD_TYPE_LABELS.get(ctype, ctype),
+            marker_color=_CARD_TYPE_COLORS.get(ctype, "#999"),
+            hovertemplate="%{x}<br>Share: %{y:.1f}%<extra>" + _CARD_TYPE_LABELS.get(ctype, ctype) + "</extra>",
+        ))
+    fig.update_layout(
+        barmode="stack",
+        xaxis_title=None, yaxis_title="Share %",
+        yaxis=dict(range=[0, 100], ticksuffix="%"),
+        legend=dict(orientation="h", y=-0.15),
+        plot_bgcolor="white", paper_bgcolor="white",
+        margin=dict(t=20, b=60, l=60, r=20),
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(gridcolor="#f0f0f0")
+    return fig
+
+
+def card_type_breakage_chart(trends_df: pd.DataFrame) -> go.Figure:
+    """Line chart: breakage rate per card type over time."""
+    fig = go.Figure()
+    for ctype in ["amazon", "closed_loop", "open_loop"]:
+        sub = trends_df[trends_df["card_type"] == ctype]
+        if sub.empty or len(sub) < 2:
+            continue
+        fig.add_trace(go.Scatter(
+            x=sub["month"], y=sub["breakage_rate"],
+            name=_CARD_TYPE_LABELS.get(ctype, ctype),
+            mode="lines+markers",
+            line=dict(color=_CARD_TYPE_COLORS.get(ctype, "#999"), width=2),
+            marker=dict(size=6),
+            hovertemplate="%{x}<br>Breakage: %{y:.1f}%<extra>" + _CARD_TYPE_LABELS.get(ctype, ctype) + "</extra>",
+        ))
+    fig.update_layout(
+        xaxis_title=None, yaxis_title="Breakage Rate %",
+        yaxis=dict(ticksuffix="%"),
+        legend=dict(orientation="h", y=-0.15),
+        plot_bgcolor="white", paper_bgcolor="white",
+        margin=dict(t=20, b=60, l=60, r=20),
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(gridcolor="#f0f0f0")
+    return fig
+
+
+def brand_shift_chart(shift_df: pd.DataFrame, top_n: int = 12) -> go.Figure:
+    """Horizontal bar: brand share delta (recent 3M vs prior 3M)."""
+    if shift_df.empty:
+        return go.Figure()
+
+    gainers = shift_df.nlargest(top_n // 2, "delta")
+    losers  = shift_df.nsmallest(top_n // 2, "delta")
+    plot_df = pd.concat([gainers, losers]).drop_duplicates("Brand").sort_values("delta")
+
+    colors = ["#f04438" if d < 0 else "#12b76a" for d in plot_df["delta"]]
+
+    fig = go.Figure(go.Bar(
+        x=plot_df["delta"],
+        y=plot_df["Brand"],
+        orientation="h",
+        marker_color=colors,
+        hovertemplate="%{y}<br>Δ share: %{x:+.2f}pp<extra></extra>",
+    ))
+    fig.add_vline(x=0, line_color="#ccc", line_width=1)
+    fig.update_layout(
+        xaxis_title="Share change (percentage points)",
+        yaxis_title=None,
+        plot_bgcolor="white", paper_bgcolor="white",
+        margin=dict(t=20, b=40, l=200, r=40),
+        height=max(300, len(plot_df) * 30),
+    )
+    fig.update_xaxes(gridcolor="#f0f0f0", zeroline=False)
+    fig.update_yaxes(showgrid=False)
+    return fig
