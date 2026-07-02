@@ -120,15 +120,29 @@ st.markdown("")
 section_label("Per-Currency Breakdown")
 st.caption("Original amounts alongside their converted equivalent. Sorted by breakage amount (highest first).")
 
+# Which target currencies to show converted columns for (each adds a Total + Breakage pair).
+convert_targets = st.multiselect(
+    "Show converted columns in",
+    options=available_currencies,
+    default=[base_currency] if base_currency in available_currencies else [],
+    key="global_convert_targets",
+    help="Each selected currency adds a Total Redeemed and Breakage column, converting every "
+         "row's original amount at today's rates. A currency's own row equals its original.",
+)
+
 table_rows = []
 for r in rows:
-    table_rows.append({
-        "Currency":                        r["currency"],
-        "Total Redeemed (original)":       calculator.fmt_amount(r["orig_total"],    r["currency"]),
-        "Breakage (original)":             calculator.fmt_amount(r["orig_breakage"], r["currency"]),
-        f"Total Redeemed ({base_currency})":  calculator.fmt_amount(r["conv_total"],    base_currency) if r["convertible"] else "—",
-        f"Breakage ({base_currency})":        calculator.fmt_amount(r["conv_breakage"], base_currency) if r["convertible"] else "—",
-    })
+    row = {
+        "Currency":                  r["currency"],
+        "Total Redeemed (original)": calculator.fmt_amount(r["orig_total"],    r["currency"]),
+        "Breakage (original)":       calculator.fmt_amount(r["orig_breakage"], r["currency"]),
+    }
+    for tgt in convert_targets:
+        conv_total    = fx.convert_to(r["orig_total"],    r["currency"], tgt, rates)
+        conv_breakage = fx.convert_to(r["orig_breakage"], r["currency"], tgt, rates)
+        row[f"Total Redeemed ({tgt})"] = calculator.fmt_amount(conv_total, tgt)    if conv_total    is not None else "—"
+        row[f"Breakage ({tgt})"]       = calculator.fmt_amount(conv_breakage, tgt) if conv_breakage is not None else "—"
+    table_rows.append(row)
 
 st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
