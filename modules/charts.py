@@ -266,49 +266,129 @@ def dow_breakage_chart(dow_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def cohort_heatmap(matrix_data: dict, mode: str = "pct") -> go.Figure:
-    """Redemption month × activation month heatmap. mode: 'pct' or 'amount'."""
+def pending_pipeline_bar(pdf: pd.DataFrame, mode: str = "count", currency: str = "") -> go.Figure:
+    """Stacked bar per redemption month: Activated vs Still-Pending, with the
+    pending slice coloured by cohort maturity. mode: 'count' or 'amount'."""
+    months = [_fmt_month(m) for m in pdf["redemption_month"]]
+    in_window = pdf["status"] == "In-window"
+
+    if mode == "amount":
+        from modules.calculator import fmt_amount
+        activated = pdf["activated_amount"]
+        pending = pdf["pending_amount"]
+        y_title = f"Amount ({currency})" if currency else "Amount"
+        val_fmt = (lambda v: fmt_amount(v, currency)) if currency else (lambda v: f"{v:,.0f}")
+    else:
+        activated = pdf["activated"].astype(float)
+        pending = pdf["pending_count"].astype(float)
+        y_title = "Card Count"
+        val_fmt = lambda v: f"{v:,.0f}"
+
+    pending_open = [p if w else 0 for p, w in zip(pending, in_window)]
+    pending_lost = [p if not w else 0 for p, w in zip(pending, in_window)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=months, y=activated, name="Activated",
+        marker_color="#12b76a",
+        hovertemplate="%{x}<br>Activated: %{text}<extra></extra>",
+        text=[val_fmt(v) for v in activated], textposition="none",
+    ))
+    fig.add_trace(go.Bar(
+        x=months, y=pending_open, name="Pending — in window (may convert)",
+        marker_color="#f79009",
+        hovertemplate="%{x}<br>Pending (in window): %{text}<extra></extra>",
+        text=[val_fmt(v) for v in pending_open], textposition="none",
+    ))
+    fig.add_trace(go.Bar(
+        x=months, y=pending_lost, name="Pending — matured (lost)",
+        marker_color="#f04438",
+        hovertemplate="%{x}<br>Pending (matured): %{text}<extra></extra>",
+        text=[val_fmt(v) for v in pending_lost], textposition="none",
+    ))
+
+    fig.update_layout(
+        barmode="stack",
+        xaxis_title=None, yaxis_title=y_title,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font_size=11),
+        margin=dict(t=40, b=40, l=70, r=20),
+        plot_bgcolor="white", paper_bgcolor="white",
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(gridcolor="#f0f0f0")
+    return fig
+
+
+def cohort_heatmap(matrix_data: dict, mode: str = "cards") -> go.Figure:
+    """Redemption month × activation month heatmap.
+
+    mode:
+      'cards'  → % of cards (colour + label)          [legacy alias: 'pct']
+      'value'  → % of currency value (colour + label)
+      'amount' → currency amount label, coloured by % of value
+    """
     row_labels = [_fmt_month(m) for m in matrix_data["row_labels"]]
     act_labels = [_fmt_month(m) for m in matrix_data["act_cols"]]
 
-    act_text = matrix_data["act_pct_text"] if mode == "pct" else matrix_data["act_amount_text"]
-    never_text = matrix_data["never_pct_text"] if mode == "pct" else matrix_data["never_amount_text"]
+    if mode in ("cards", "pct"):
+        act_z, never_z = matrix_data["act_z"], matrix_data["never_z"]
+        act_text, never_text = matrix_data["act_pct_text"], matrix_data["never_pct_text"]
+    elif mode == "value":
+        act_z, never_z = matrix_data["act_amt_z"], matrix_data["never_amt_z"]
+        act_text, never_text = matrix_data["act_amt_pct_text"], matrix_data["never_amt_pct_text"]
+    else:  # amount — currency labels, coloured by share of value
+        act_z, never_z = matrix_data["act_amt_z"], matrix_data["never_amt_z"]
+        act_text, never_text = matrix_data["act_amount_text"], matrix_data["never_amount_text"]
 
-    _GREEN = [[0.0, "rgb(255,255,255)"], [0.15, "rgb(198,239,206)"],
+    _GREEN = [[0.0, "rgb(237,247,239)"], [0.15, "rgb(198,239,206)"],
               [0.5, "rgb(99,190,123)"], [1.0, "rgb(0,128,43)"]]
-    _RED = [[0.0, "rgb(255,255,255)"], [0.15, "rgb(255,199,206)"],
+    _RED = [[0.0, "rgb(253,242,242)"], [0.15, "rgb(255,199,206)"],
             [0.5, "rgb(220,80,80)"], [1.0, "rgb(156,0,6)"]]
 
-    fig = go.Figure()
+    # Two shared-axis panels: activation matrix (left) + tight Never column
+    # (right). Splitting them removes the dead space that appeared when a lone
+    # "Never" category was stretched across a single wide axis.
+    from plotly.subplots import make_subplots
+    fig = make_subplots(
+        rows=1, cols=2,
+        column_widths=[0.9, 0.1] if act_labels else [0.001, 0.999],
+        horizontal_spacing=0.03,
+        shared_yaxes=True,
+    )
+
+    _AXIS = dict(color="#475467", tickfont=dict(size=11), fixedrange=True)
 
     if act_labels:
         fig.add_trace(go.Heatmap(
-            x=act_labels, y=row_labels, z=matrix_data["act_z"],
-            text=act_text, texttemplate="%{text}",
+            x=act_labels, y=row_labels, z=act_z,
+            text=act_text, texttemplate="%{text}", textfont=dict(size=11),
             colorscale=_GREEN, zmin=0, zmax=100, showscale=False,
-            hovertemplate="Redeemed: %{y}<br>Activated: %{x}<br>%{text}<extra></extra>",
-            textfont=dict(size=10),
-        ))
+            xgap=3, ygap=3, hoverongaps=False,
+            hovertemplate="Redeemed %{y} · activated %{x}<br><b>%{text}</b><extra></extra>",
+        ), row=1, col=1)
 
     fig.add_trace(go.Heatmap(
-        x=["Never"], y=row_labels, z=matrix_data["never_z"],
-        text=never_text, texttemplate="%{text}",
+        x=["Never"], y=row_labels, z=never_z,
+        text=never_text, texttemplate="%{text}", textfont=dict(size=11),
         colorscale=_RED, zmin=0, zmax=100, showscale=False,
-        hovertemplate="Redeemed: %{y}<br>%{text}<extra></extra>",
-        textfont=dict(size=10),
-    ))
+        xgap=3, ygap=3, hoverongaps=False,
+        hovertemplate="Redeemed %{y} · never activated<br><b>%{text}</b><extra></extra>",
+    ), row=1, col=2)
 
-    all_x = act_labels + ["Never"]
     n_rows = len(row_labels)
     fig.update_layout(
-        xaxis=dict(categoryorder="array", categoryarray=all_x, title="Activation Month", side="bottom"),
-        yaxis=dict(autorange="reversed", title="Redemption Month"),
-        height=max(320, n_rows * 56 + 120),
-        margin=dict(t=20, b=80, l=100, r=20),
+        height=max(300, n_rows * 52 + 110),
+        margin=dict(t=20, b=60, l=90, r=16),
         plot_bgcolor="white", paper_bgcolor="white",
+        font=dict(color="#475467"),
     )
-    if act_labels:
-        fig.add_vline(x=len(act_labels) - 0.5, line_color="#aaa", line_width=1.5, line_dash="dot")
+    fig.update_yaxes(autorange="reversed", showgrid=False, ticks="", zeroline=False,
+                     title_text="Redemption Month", **_AXIS, row=1, col=1)
+    fig.update_yaxes(autorange="reversed", showgrid=False, ticks="", zeroline=False,
+                     **_AXIS, row=1, col=2)
+    fig.update_xaxes(showgrid=False, ticks="", side="bottom",
+                     title_text="Activation Month", **_AXIS, row=1, col=1)
+    fig.update_xaxes(showgrid=False, ticks="", **_AXIS, row=1, col=2)
     return fig
 
 

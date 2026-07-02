@@ -8,6 +8,9 @@ from modules.ui import apply_theme, page_header, section_label, top_filters
 require_login()
 apply_theme()
 
+# Clean display charts — no zoom/pan toolbar cluttering the dashboard
+PLOTLY_CFG = {"displayModeBar": False, "responsive": True}
+
 ensure_loaded()
 
 df_raw: pd.DataFrame = st.session_state["df"]
@@ -32,16 +35,77 @@ if df.empty:
 
 st.markdown("")
 
+# ── Pending Activation Pipeline ───────────────────────────────────────────────
+section_label("Pending Activation Pipeline — Not Yet Activated, by Redemption Month")
+
+pending = calculator.pending_by_month(df)
+threshold_days = pending.attrs.get("threshold_days", 60)
+
+st.caption(
+    f"For each redemption-month cohort: how many cards are **still not activated** and their value. "
+    f"⏳ **In-window** = redeemed within the last {threshold_days} days — these may still convert. "
+    f"✔ **Matured** = past the window, so this pending value is effectively confirmed breakage."
+)
+
+if pending.empty:
+    st.info(f"No data available for {currency}.")
+else:
+    pend_mode = st.radio(
+        "Show values as", ["Card Count", "Currency Amount"],
+        horizontal=True, key="pending_mode",
+    )
+    mode = "count" if pend_mode == "Card Count" else "amount"
+    st.plotly_chart(
+        charts.pending_pipeline_bar(pending, mode=mode, currency=currency),
+        use_container_width=True, config=PLOTLY_CFG,
+    )
+
+    # Headline: total still pending while in window
+    open_mask = pending["status"] == "In-window"
+    open_count = int(pending.loc[open_mask, "pending_count"].sum())
+    open_amount = pending.loc[open_mask, "pending_amount"].sum()
+    matured_count = int(pending.loc[~open_mask, "pending_count"].sum())
+    matured_amount = pending.loc[~open_mask, "pending_amount"].sum()
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Pending — in window (cards)", f"{open_count:,}",
+              help="Cards not yet activated in cohorts still within the activation window. These may still convert.")
+    m2.metric("Pending — in window (amount)", calculator.fmt_amount(open_amount, currency))
+    m3.metric("Pending — matured (cards)", f"{matured_count:,}",
+              help="Not-activated cards in settled cohorts — effectively confirmed breakage.")
+    m4.metric("Pending — matured (amount)", calculator.fmt_amount(matured_amount, currency))
+
+    # Precise month-wise ledger
+    table = pending.sort_values("redemption_month", ascending=False).copy()
+    table["Month"] = table["redemption_month"].apply(charts._fmt_month)
+    table["Pending Amount"] = table["pending_amount"].apply(lambda v: calculator.fmt_amount(v, currency))
+    table["% Pending"] = table["pct_pending"].map(lambda v: f"{v}%")
+    table["Status"] = table["status"].map({"In-window": "⏳ In-window", "Matured": "✔ Matured"})
+    st.dataframe(
+        table[["Month", "total", "activated", "pending_count", "Pending Amount", "% Pending", "Status"]].rename(
+            columns={"total": "Total Issued", "activated": "Activated", "pending_count": "Still Pending"}
+        ),
+        use_container_width=True, hide_index=True,
+    )
+
+st.markdown("")
+
 # ── Cohort Activation Matrix ──────────────────────────────────────────────────
 section_label("Cohort Activation Matrix")
 st.caption(
     "Each row = a redemption-month cohort. Each column = the month those cards were activated. "
-    "The **Never** column is your breakage. ~ prefix = cohort still within activation window."
+    "The **Never** column is your breakage. ~ prefix = cohort still within activation window.  \n"
+    "**% of Cards** = share of card *count*.  **% of Value** = share of currency *value* "
+    "(higher when unactivated cards carry larger denominations).  **Currency Amount** = the value itself."
 )
 
 toggle_col, legend_col = st.columns([2, 3])
 with toggle_col:
-    cohort_mode = st.radio("Show values as", ["Percentage (%)", "Currency Amount"], horizontal=True, key="cm_mode")
+    cohort_mode = st.radio(
+        "Show values as",
+        ["% of Cards", "% of Value", "Currency Amount"],
+        horizontal=True, key="cm_mode",
+    )
 with legend_col:
     st.markdown(
         "<div style='display:flex;gap:10px;align-items:center;margin-top:8px'>"
@@ -56,8 +120,8 @@ with st.spinner("Building cohort matrix…"):
 if matrix_data is None:
     st.info(f"No data available for {currency}.")
 else:
-    mode = "pct" if cohort_mode == "Percentage (%)" else "amount"
-    st.plotly_chart(charts.cohort_heatmap(matrix_data, mode=mode), use_container_width=True)
+    mode = {"% of Cards": "cards", "% of Value": "value", "Currency Amount": "amount"}[cohort_mode]
+    st.plotly_chart(charts.cohort_heatmap(matrix_data, mode=mode), use_container_width=True, config=PLOTLY_CFG)
 
 st.markdown("")
 
@@ -71,7 +135,7 @@ st.caption(
 with st.spinner("Computing decay curves…"):
     survival_df = calculator.cohort_survival(df, currency)
 if len(survival_df) >= 2:
-    st.plotly_chart(charts.survival_curve_chart(survival_df), use_container_width=True)
+    st.plotly_chart(charts.survival_curve_chart(survival_df), use_container_width=True, config=PLOTLY_CFG)
 else:
     st.info("Not enough cohort data to show decay curves (need at least 2 cohorts with 5+ records each).")
 
@@ -83,7 +147,7 @@ st.caption("Darker = more activations. Useful for understanding email delivery t
 
 timing_data = calculator.activation_heatmap_data(df)
 if not timing_data.empty:
-    st.plotly_chart(charts.activation_timing_heatmap(timing_data), use_container_width=True)
+    st.plotly_chart(charts.activation_timing_heatmap(timing_data), use_container_width=True, config=PLOTLY_CFG)
 else:
     st.info("No activation timing data available.")
 
@@ -123,7 +187,7 @@ else:
         help="Percentage of activated cards claimed within 24 hours of redemption — indicates immediate engagement with the email.",
     )
 
-    st.plotly_chart(charts.lag_histogram(df), use_container_width=True)
+    st.plotly_chart(charts.lag_histogram(df), use_container_width=True, config=PLOTLY_CFG)
 
 st.markdown("---")
 

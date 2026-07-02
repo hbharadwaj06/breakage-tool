@@ -51,11 +51,18 @@ def activated_amount_for_currency(df: pd.DataFrame, currency: str) -> float:
     return round(df[(df["Currency"] == currency) & df["is_activated"]]["Amount"].sum(), 2)
 
 
+# Minimum activation window: recent cohorts always get at least this many days
+# before their unactivated cards are treated as settled breakage, even when the
+# data-derived percentile is smaller (activations here cluster in the first days).
+MIN_MATURITY_DAYS = 30
+
+
 @st.cache_data
 def maturity_threshold_days(df: pd.DataFrame, pct: float = 0.95) -> int:
     """
     How many days after redemption until `pct` of all activations have occurred,
-    derived from cohorts old enough to be fully settled (redeemed 180+ days ago).
+    derived from cohorts old enough to be fully settled (redeemed 180+ days ago),
+    floored at MIN_MATURITY_DAYS so recent cohorts get a fair activation window.
     Falls back to 60 if there is not enough historical data.
     """
     max_date = df["Redemption Date"].max()
@@ -66,7 +73,7 @@ def maturity_threshold_days(df: pd.DataFrame, pct: float = 0.95) -> int:
     if len(activated) < 20:
         return 60
 
-    return max(1, int(activated["activation_lag_days"].quantile(pct)))
+    return max(MIN_MATURITY_DAYS, int(activated["activation_lag_days"].quantile(pct)))
 
 
 @st.cache_data
@@ -106,6 +113,48 @@ def monthly_trend_v2(df: pd.DataFrame) -> pd.DataFrame:
     result["activation_rate"] = (
         result["activated"] / result["total"].replace(0, float("nan")) * 100
     ).round(2).fillna(0)
+    return result
+
+
+@st.cache_data
+def pending_by_month(df: pd.DataFrame) -> pd.DataFrame:
+    """Per redemption-month: how many cards are still not activated ("pending")
+    and their amount, split by cohort maturity.
+
+    A cohort is 'In-window' if its redemption month is still within the
+    maturity threshold (those pending cards may yet convert) and 'Matured'
+    otherwise (pending here is effectively confirmed breakage).
+
+    Assumes ``df`` is already filtered to a single currency, so amounts are
+    directly comparable. Not-activated == breakage in this data model, so
+    pending_count/pending_amount equal the breakage figures for the cohort.
+    """
+    prelim, threshold = preliminary_months(df)
+
+    g = df.groupby("redemption_month")
+    act = df[df["is_activated"]].groupby("redemption_month")
+    brk = df[df["is_breakage"]].groupby("redemption_month")
+
+    result = pd.DataFrame({
+        "total": g.size(),
+        "activated": g["is_activated"].sum(),
+        "activated_amount": act["Amount"].sum(),
+        "pending_amount": brk["Amount"].sum(),
+    }).fillna(0)
+    result.index.name = "redemption_month"
+    result = result.reset_index()
+    result["redemption_month"] = result["redemption_month"].astype(str)
+    result["activated"] = result["activated"].astype(int)
+    result["pending_count"] = (result["total"] - result["activated"]).astype(int)
+    result["activated_amount"] = result["activated_amount"].round(2)
+    result["pending_amount"] = result["pending_amount"].round(2)
+    result["pct_pending"] = (
+        result["pending_count"] / result["total"].replace(0, float("nan")) * 100
+    ).round(2).fillna(0)
+    result["status"] = result["redemption_month"].apply(
+        lambda m: "In-window" if m in prelim else "Matured"
+    )
+    result.attrs["threshold_days"] = threshold
     return result
 
 
@@ -354,6 +403,7 @@ def cohort_activation_matrix(df: pd.DataFrame, currency: str):
 
     # Pre-build aggregates to avoid O(n) DataFrame filters in inner loop
     totals = df_c.groupby("redemption_month").size()
+    total_amounts = df_c.groupby("redemption_month")["Amount"].sum()
 
     act_df = df_c[df_c["is_activated"] & df_c["activation_month"].notna()]
     if not act_df.empty:
@@ -378,47 +428,67 @@ def cohort_activation_matrix(df: pd.DataFrame, currency: str):
     never_amounts = never_g["Amount"].sum().reindex(r_months, fill_value=0)
 
     act_z, act_pct_text, act_amount_text = [], [], []
+    act_amt_z, act_amt_pct_text = [], []
     never_z, never_pct_text, never_amount_text = [], [], []
+    never_amt_z, never_amt_pct_text = [], []
 
     for r_month in r_months:
         total = totals.get(r_month, 0)
+        total_amt = total_amounts.get(r_month, 0)
         z_row, pct_row, amt_row = [], [], []
+        amt_z_row, amt_pct_row = [], []
         for a_month in a_months:
             if a_month < r_month:
                 z_row.append(None)
                 pct_row.append("")
                 amt_row.append("")
+                amt_z_row.append(None)
+                amt_pct_row.append("")
             else:
                 count = count_pivot.loc[r_month, a_month] if a_month in count_pivot.columns else 0
                 amount = amount_pivot.loc[r_month, a_month] if a_month in amount_pivot.columns else 0
                 pct = count / total * 100 if total else 0
+                amt_pct = amount / total_amt * 100 if total_amt else 0
                 if count > 0:
                     z_row.append(pct)
                     pct_row.append(f"{pct:.1f}%")
                     amt_row.append(fmt_amount(amount, currency))
+                    amt_z_row.append(amt_pct)
+                    amt_pct_row.append(f"{amt_pct:.1f}%")
                 else:
                     z_row.append(None)
                     pct_row.append("")
                     amt_row.append("")
+                    amt_z_row.append(None)
+                    amt_pct_row.append("")
         act_z.append(z_row)
         act_pct_text.append(pct_row)
         act_amount_text.append(amt_row)
+        act_amt_z.append(amt_z_row)
+        act_amt_pct_text.append(amt_pct_row)
 
         n_count = int(never_counts.get(r_month, 0))
         n_amount = never_amounts.get(r_month, 0)
         n_pct = n_count / total * 100 if total else 0
+        n_amt_pct = n_amount / total_amt * 100 if total_amt else 0
         prefix = "~" if r_month in open_cohorts else ""
         never_z.append([n_pct])
         never_pct_text.append([f"{prefix}{n_pct:.1f}%"])
         never_amount_text.append([f"{prefix}{fmt_amount(n_amount, currency)}"])
+        never_amt_z.append([n_amt_pct])
+        never_amt_pct_text.append([f"{prefix}{n_amt_pct:.1f}%"])
 
     return {
         "act_z": act_z,
         "act_pct_text": act_pct_text,
         "act_amount_text": act_amount_text,
+        "act_amt_z": act_amt_z,
+        "act_amt_pct_text": act_amt_pct_text,
         "never_z": never_z,
         "never_pct_text": never_pct_text,
         "never_amount_text": never_amount_text,
+        "never_amt_z": never_amt_z,
+        "never_amt_pct_text": never_amt_pct_text,
         "row_labels": [str(m) for m in r_months],
         "act_cols": [str(m) for m in a_months],
         "open_cohorts": {str(m) for m in open_cohorts},
