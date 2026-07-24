@@ -2,6 +2,10 @@
 data/
 !data/.gitkeep
 
+# Exported reports — contain aggregated real numbers, keep out of repo
+*.xlsx
+*.xls
+
 # Real user credentials — each collaborator runs manage_users.py to create their own
 config/users.json
 
